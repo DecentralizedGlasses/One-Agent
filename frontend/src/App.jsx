@@ -14,7 +14,7 @@ export default function App() {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="text-center space-y-4">
-          <h1 className="text-3xl font-bold text-brand">AgentGuard</h1>
+          <h1 className="text-3xl font-bold text-brand">One Agent</h1>
           <p className="text-gray-400">On-chain policy firewall for AI DeFi agents</p>
           <button
             onClick={() => connect({ connector: injected() })}
@@ -31,7 +31,7 @@ export default function App() {
     <div className="min-h-screen p-6 space-y-6 max-w-5xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-brand">AgentGuard</h1>
+        <h1 className="text-2xl font-bold text-brand">One Agent</h1>
         <div className="flex items-center gap-4">
           <span className="text-sm text-gray-400">{address?.slice(0, 6)}…{address?.slice(-4)}</span>
           <button

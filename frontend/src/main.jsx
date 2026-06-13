@@ -3,7 +3,7 @@ import ReactDOM from "react-dom/client";
 import { WagmiProvider, createConfig, http } from "wagmi";
 import { baseSepolia } from "wagmi/chains";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import App from "./App";
+import App from "./App.tsx";
 import "./index.css";
 
 const wagmiConfig = createConfig({

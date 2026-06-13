@@ -22,27 +22,27 @@ export default function KillSwitch() {
   }
 
   return (
-    <div className="bg-gray-900 rounded-xl p-5 flex flex-col items-center justify-center gap-4 border border-gray-800">
-      <p className="text-sm text-gray-400 font-semibold uppercase tracking-wider">Kill Switch</p>
+    <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+      <p className="text-sm uppercase tracking-[0.22em] text-slate-500">Kill switch</p>
+      <div className="mt-4 rounded-3xl bg-slate-50 px-4 py-3">
+        <div className="flex items-center gap-3">
+          <span className={`inline-flex h-3.5 w-3.5 rounded-full ${isRevoked ? "bg-rose-500" : "bg-emerald-500"}`} />
+          <p className="text-sm font-semibold text-slate-900">{isRevoked ? "Agent revoked" : "Agent active"}</p>
+        </div>
+      </div>
 
-      <div className={`w-4 h-4 rounded-full ${isRevoked ? "bg-red-500" : "bg-green-500"} animate-pulse`} />
-
-      <p className="text-xs text-gray-500">{isRevoked ? "Agent is REVOKED" : "Agent is ACTIVE"}</p>
+      <p className="mt-4 text-sm text-slate-500">Protect the agent by toggling emergency revoke state.</p>
 
       <button
         onClick={toggle}
         disabled={isPending}
-        className={`w-full py-3 rounded-lg font-bold text-sm transition disabled:opacity-40 ${
+        className={`mt-6 w-full rounded-full px-4 py-3 text-sm font-semibold text-white transition ${
           isRevoked
-            ? "bg-green-700 hover:bg-green-600 text-white"
-            : "bg-red-700 hover:bg-red-600 text-white"
-        }`}
+            ? "bg-emerald-600 hover:bg-emerald-500"
+            : "bg-rose-600 hover:bg-rose-500"
+        } disabled:cursor-not-allowed disabled:opacity-60`}
       >
-        {isPending
-          ? "Confirming…"
-          : isRevoked
-          ? "Reinstate Agent"
-          : "Emergency Revoke"}
+        {isPending ? "Confirming…" : isRevoked ? "Reinstate agent" : "Emergency revoke"}
       </button>
     </div>
   );
