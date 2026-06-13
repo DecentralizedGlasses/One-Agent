@@ -34,11 +34,11 @@ export default function PolicyPanel() {
   const isRevoked     = policy?.[1] ?? false;
 
   return (
-    <div className="bg-white rounded-xl p-5 space-y-4 border border-gray-200 shadow-sm">
+    <div className="bg-white dark:bg-slate-900 rounded-xl p-5 space-y-4 border border-gray-200 dark:border-slate-700 shadow-sm">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Policy Rules</h2>
+        <h2 className="text-sm font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Policy Rules</h2>
         {isRevoked && (
-          <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">AGENT REVOKED</span>
+          <span className="text-xs bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200 px-2 py-1 rounded">AGENT REVOKED</span>
         )}
       </div>
 
@@ -64,13 +64,13 @@ export default function PolicyPanel() {
       </div>
 
       <div className="space-y-2">
-        <p className="text-xs text-gray-400">Protocol Whitelist</p>
+        <p className="text-xs text-gray-400 dark:text-slate-500">Protocol Whitelist</p>
         <div className="flex gap-2 flex-wrap">
           {policy?.[6]?.map((addr) => (
-            <span key={addr} className="text-xs bg-gray-100 rounded px-2 py-1 text-gray-600 border border-gray-200">
+            <span key={addr} className="text-xs bg-gray-100 dark:bg-slate-800 rounded px-2 py-1 text-gray-600 dark:text-slate-300 border border-gray-200 dark:border-slate-700">
               {addr.slice(0, 6)}…{addr.slice(-4)}
             </span>
-          )) ?? <span className="text-xs text-gray-400">—</span>}
+          )) ?? <span className="text-xs text-gray-400 dark:text-slate-500">—</span>}
         </div>
       </div>
 
@@ -88,13 +88,13 @@ export default function PolicyPanel() {
 function Field({ label, value, onChange, placeholder }) {
   return (
     <div className="space-y-1">
-      <label className="text-xs text-gray-400">{label}</label>
+      <label className="text-xs text-gray-400 dark:text-slate-500">{label}</label>
       <input
         type="number"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full bg-gray-50 rounded px-3 py-2 text-sm text-gray-900 placeholder-gray-400 border border-gray-300 focus:outline-none focus:border-brand"
+        className="w-full bg-gray-50 dark:bg-slate-900 rounded px-3 py-2 text-sm text-gray-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500 border border-gray-300 dark:border-slate-700 focus:outline-none focus:border-brand"
       />
     </div>
   );

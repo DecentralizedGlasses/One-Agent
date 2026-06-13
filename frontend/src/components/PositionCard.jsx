@@ -19,14 +19,14 @@ export default function PositionCard() {
 
   const healthFactor = hf ? (Number(hf) / 1e18).toFixed(4) : "—";
   const hfColor =
-    !hf ? "text-gray-400"
-    : Number(hf) / 1e18 >= 2   ? "text-green-600"
-    : Number(hf) / 1e18 >= 1.5 ? "text-yellow-600"
-    : "text-red-600";
+    !hf ? "text-gray-400 dark:text-slate-400"
+    : Number(hf) / 1e18 >= 2   ? "text-green-500"
+    : Number(hf) / 1e18 >= 1.5 ? "text-yellow-500"
+    : "text-red-500";
 
   return (
-    <div className="bg-white rounded-xl p-5 space-y-4 border border-gray-200 shadow-sm">
-      <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Aave Position</h2>
+    <div className="bg-white dark:bg-slate-900 rounded-xl p-5 space-y-4 border border-gray-200 dark:border-slate-700 shadow-sm">
+      <h2 className="text-sm font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Aave Position</h2>
 
       <div className="grid grid-cols-3 gap-4">
         <Stat label="Health Factor" value={healthFactor} valueClass={hfColor} />
@@ -34,16 +34,15 @@ export default function PositionCard() {
         <Stat label="Cooldown" value={policy ? `${Number(policy[3]) / 60}m` : "—"} />
       </div>
 
-      {/* TODO: pull live collateral/debt from agent /position endpoint */}
-      <p className="text-xs text-gray-400">Position data via Aave v3 on Base Sepolia</p>
+      <p className="text-xs text-gray-400 dark:text-slate-500">Position data via Aave v3 on Base Sepolia</p>
     </div>
   );
 }
 
-function Stat({ label, value, valueClass = "text-gray-900" }) {
+function Stat({ label, value, valueClass = "text-gray-900 dark:text-slate-100" }) {
   return (
     <div>
-      <p className="text-xs text-gray-400">{label}</p>
+      <p className="text-xs text-gray-400 dark:text-slate-500">{label}</p>
       <p className={`text-xl font-bold ${valueClass}`}>{value}</p>
     </div>
   );

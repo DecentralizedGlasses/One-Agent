@@ -22,12 +22,12 @@ export default function KillSwitch() {
   }
 
   return (
-    <div className="bg-white rounded-xl p-5 flex flex-col items-center justify-center gap-4 border border-gray-200 shadow-sm">
-      <p className="text-sm text-gray-500 font-semibold uppercase tracking-wider">Kill Switch</p>
+    <div className="bg-white dark:bg-slate-900 rounded-xl p-5 flex flex-col items-center justify-center gap-4 border border-gray-200 dark:border-slate-700 shadow-sm">
+      <p className="text-sm text-gray-500 dark:text-slate-400 font-semibold uppercase tracking-wider">Kill Switch</p>
 
       <div className={`w-4 h-4 rounded-full ${isRevoked ? "bg-red-500" : "bg-green-500"} animate-pulse`} />
 
-      <p className="text-xs text-gray-400">{isRevoked ? "Agent is REVOKED" : "Agent is ACTIVE"}</p>
+      <p className="text-xs text-gray-400 dark:text-slate-500">{isRevoked ? "Agent is REVOKED" : "Agent is ACTIVE"}</p>
 
       <button
         onClick={toggle}
