@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { injected } from "wagmi/connectors";
+import { DynamicWidget } from "@dynamic-labs/sdk-react-core";
 import PositionCard from "./components/PositionCard";
 import PolicyPanel  from "./components/PolicyPanel";
 import ActionFeed   from "./components/ActionFeed";
 import KillSwitch   from "./components/KillSwitch";
+import WalletStatus from "./components/WalletStatus";
 
 export default function App() {
   const [theme, setTheme] = useState("light");
@@ -48,12 +50,18 @@ export default function App() {
         <div className="text-center space-y-4">
           <h1 className="text-3xl font-bold text-brand">One-Agent</h1>
           <p className="text-gray-500 dark:text-slate-300">On-chain policy firewall for AI DeFi agents</p>
-          <button
-            onClick={() => connect({ connector: injected() })}
-            className="px-6 py-3 bg-brand text-white rounded-lg font-semibold hover:bg-indigo-500 transition"
-          >
-            Connect Wallet
-          </button>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <DynamicWidget
+              buttonClassName="px-6 py-3 bg-brand text-white rounded-lg font-semibold hover:bg-indigo-500 transition"
+              buttonContainerClassName=""
+            />
+            <button
+              onClick={() => connect({ connector: injected() })}
+              className="px-6 py-3 bg-slate-900 text-white rounded-lg font-semibold hover:bg-slate-800 transition"
+            >
+              Connect Wallet
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -84,6 +92,8 @@ export default function App() {
           </button>
         </div>
       </div>
+
+      <WalletStatus />
 
       {/* Top row: position + kill switch */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
