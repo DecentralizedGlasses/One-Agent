@@ -5,25 +5,39 @@ import "forge-std/Script.sol";
 import "../src/PolicyVault.sol";
 
 contract DeployPolicyVault is Script {
-    // Base Sepolia — Aave v3 Pool
-    address constant AAVE_POOL = 0x07eA79F68B2B3df564D0A34F8e19D9B1e339814;
+    // Aave v3 Pool on Base Sepolia
+    address constant AAVE_POOL = 0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951;
+
+    // USDC on Base Sepolia — tracked for balance snapshots
+    address constant USDC = 0x036CbD53842c5426634e7929541eC2318f3dCF7e;
+
+    // Chainlink ETH/USD feed on Base Sepolia
+    address constant ETH_USD_FEED = 0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb;
 
     function run() external {
         address agentAddress = vm.envAddress("AGENT_ADDRESS");
         uint256 pk = vm.envUint("PRIVATE_KEY");
 
+        // Whitelist: only the Aave pool is allowed
         address[] memory protocols = new address[](1);
         protocols[0] = AAVE_POOL;
+
+        // Track USDC balance after every agent action
+        address[] memory tracked = new address[](1);
+        tracked[0] = USDC;
 
         vm.startBroadcast(pk);
 
         PolicyVault vault = new PolicyVault(
             agentAddress,
-            500e6,       // 500 USDC max per tx
-            30 minutes,  // cooldown
-            15e17,       // 1.5 health factor floor
+            500e6,        // 500 USDC max per tx
+            30 minutes,   // 30-minute cooldown between actions
+            15e17,        // Aave health factor floor: 1.5
+            1500e8,       // Chainlink price floor: $1500 ETH/USD (8 decimals)
             protocols,
-            AAVE_POOL
+            tracked,
+            AAVE_POOL,
+            ETH_USD_FEED  // Chainlink ETH/USD feed
         );
 
         vm.stopBroadcast();
