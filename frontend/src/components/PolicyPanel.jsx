@@ -48,18 +48,21 @@ export default function PolicyPanel() {
           value={maxTx}
           onChange={setMaxTx}
           placeholder={currentMax}
+          step="0.01"
         />
         <Field
           label={`Cooldown (minutes) — current: ${currentCd}`}
           value={cooldown}
           onChange={setCooldown}
           placeholder={currentCd}
+          integersOnly
         />
         <Field
           label={`Health Factor Floor — current: ${currentHf}`}
           value={hfFloor}
           onChange={setHfFloor}
           placeholder={currentHf}
+          step="0.01"
         />
       </div>
 
@@ -85,14 +88,32 @@ export default function PolicyPanel() {
   );
 }
 
-function Field({ label, value, onChange, placeholder }) {
+function Field({ label, value, onChange, placeholder, integersOnly = false, step = "1" }) {
+  const numericPattern = integersOnly ? /^\d*$/ : /^\d*(\.\d*)?$/;
+
+  function handleChange(nextValue) {
+    if (numericPattern.test(nextValue)) {
+      onChange(nextValue);
+    }
+  }
+
+  function handleKeyDown(e) {
+    if (["e", "E", "+", "-"].includes(e.key) || (integersOnly && e.key === ".")) {
+      e.preventDefault();
+    }
+  }
+
   return (
     <div className="space-y-1">
       <label className="text-xs text-gray-400 dark:text-slate-500">{label}</label>
       <input
         type="number"
+        inputMode={integersOnly ? "numeric" : "decimal"}
+        min="0"
+        step={step}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => handleChange(e.target.value)}
+        onKeyDown={handleKeyDown}
         placeholder={placeholder}
         className="w-full bg-gray-50 dark:bg-slate-900 rounded px-3 py-2 text-sm text-gray-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500 border border-gray-300 dark:border-slate-700 focus:outline-none focus:border-brand"
       />
