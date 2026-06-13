@@ -205,8 +205,24 @@ function App() {
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-              <div className="flex items-center gap-2 rounded-3xl bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 shadow-sm">
-                <span className="text-xs text-slate-500">ENS:</span>
+              <div className="flex items-center gap-2 rounded-2xl border border-indigo-200 bg-white px-3 py-2 shadow-sm">
+                <input
+                  type="text"
+                  placeholder="address or .eth"
+                  value={ensInput}
+                  onChange={(e) => setEnsInput(e.target.value)}
+                  onKeyPress={(e) => e.key === "Enter" && handleENSResolve()}
+                  className="w-28 bg-transparent text-xs font-medium text-slate-950 placeholder-slate-400 outline-none"
+                />
+                <button
+                  onClick={handleENSResolve}
+                  className="text-xs font-semibold text-indigo-600 transition hover:text-indigo-700"
+                >
+                  Set
+                </button>
+              </div>
+              <div className="flex items-center gap-2 rounded-3xl bg-slate-50 px-4 py-2 text-xs font-medium text-slate-700 shadow-sm">
+                <span className="text-slate-500">ENS:</span>
                 <span className="font-semibold text-slate-950">{ensDomain}</span>
               </div>
               <button
@@ -233,32 +249,6 @@ function App() {
       </header>
 
       <main className="mx-auto max-w-[1420px] px-6 py-8">
-        {/* ENS Domain Input Section */}
-        <section className="mb-8 rounded-[32px] border border-indigo-200 bg-gradient-to-r from-indigo-50 to-blue-50 px-8 py-6 shadow-[0_18px_60px_rgba(15,23,42,0.06)]">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h3 className="text-lg font-semibold text-slate-950">ENS Domain Management</h3>
-              <p className="mt-1 text-sm text-slate-600">Enter an Ethereum Name Service (ENS) domain to connect your wallet</p>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <input
-                type="text"
-                placeholder="e.g., myname.eth"
-                value={ensInput}
-                onChange={(e) => setEnsInput(e.target.value)}
-                onKeyPress={(e) => e.key === "Enter" && handleENSResolve()}
-                className="rounded-2xl border border-indigo-200 bg-white px-4 py-2 text-sm font-medium text-slate-950 placeholder-slate-400 transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-              />
-              <button
-                onClick={handleENSResolve}
-                className="rounded-2xl bg-indigo-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700 shadow-sm"
-              >
-                Resolve ENS
-              </button>
-            </div>
-          </div>
-        </section>
-
         <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
           {stats.map((stat) => (
             <StatCard key={stat.label} {...stat} />
