@@ -38,6 +38,8 @@ contract PolicyVaultTest is Test {
     address hacker = makeAddr("hacker");
 
     function setUp() public {
+        vm.warp(2 hours); // ensure block.timestamp > cooldownPeriod (1800s)
+
         aave           = new MockAavePool();
         allowedTarget  = new MockTarget();
         blockedTarget  = new MockTarget();
