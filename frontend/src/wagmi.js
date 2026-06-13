@@ -9,7 +9,7 @@ export const VAULT_ABI = parseAbi([
   "function cooldownRemaining() external view returns (uint256)",
   "function emergencyRevoke() external",
   "function reinstateAgent() external",
-  "function setPolicy(uint256,uint256,uint256) external",
+  "function setPolicy(uint256,uint256,uint256,int256) external",
   "function setAllowedProtocols(address[]) external",
   "event ExecutionAllowed(address indexed agent, address indexed target, uint256 amount)",
   "event ExecutionBlocked(address indexed agent, address indexed target, string reason)",
