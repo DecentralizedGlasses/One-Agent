@@ -12,7 +12,7 @@ contract DeployPolicyVault is Script {
     address constant USDC = 0x036CbD53842c5426634e7929541eC2318f3dCF7e;
 
     // Chainlink ETH/USD feed on Base Sepolia
-    address constant ETH_USD_FEED = 0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb;
+    address constant ETH_USD_FEED = 0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1;
 
     function run() external {
         address agentAddress = vm.envAddress("AGENT_ADDRESS");

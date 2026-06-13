@@ -100,6 +100,7 @@ contract PolicyVaultTest is Test {
 
     // ── Happy path ────────────────────────────────────────────────────────────
 
+    // test that the agent can execute allowed targets
     function test_AllowedExecution() public {
         bytes memory cd = abi.encodeWithSelector(MockTarget.doSomething.selector, 1);
         vm.prank(agent);
@@ -107,6 +108,7 @@ contract PolicyVaultTest is Test {
         assertEq(allowedTarget.callCount(), 1);
     }
 
+    // test that the cooldown period works as expected
     function test_CooldownExpiry_AllowsSecondCall() public {
         bytes memory cd = abi.encodeWithSelector(MockTarget.doSomething.selector, 1);
         vm.prank(agent); vault.execute(address(allowedTarget), 0, cd);
@@ -119,6 +121,7 @@ contract PolicyVaultTest is Test {
 
     // ── Kill switch ───────────────────────────────────────────────────────────
 
+    // test for emergency revocation when the vault is in an emergency state
     function test_EmergencyRevoke_BlocksAgent() public {
         vm.prank(owner); vault.emergencyRevoke();
 
@@ -128,15 +131,30 @@ contract PolicyVaultTest is Test {
         vault.execute(address(allowedTarget), 0, cd);
     }
 
+    // testing only owner can revoke the agent to the vault
     function test_OnlyOwnerCanRevoke() public {
         vm.prank(hacker);
         vm.expectRevert(PolicyVault.NotOwner.selector);
         vault.emergencyRevoke();
     }
 
+    // testing only owner can reinstate the agent to the vault
+    function test_OnlyOwnerCanReinstate() public {
+        vm.prank(owner);
+        vault.emergencyRevoke();
+
+        vm.prank(hacker);
+        vm.expectRevert(PolicyVault.NotOwner.selector);
+        vault.reinstateAgent();
+    }
+
+    // testing that the agent can execute after being reinstated
     function test_Reinstate_AllowsExecution() public {
-        vm.prank(owner); vault.emergencyRevoke();
-        vm.prank(owner); vault.reinstateAgent();
+        vm.prank(owner);
+        vault.emergencyRevoke();
+
+        vm.prank(owner);
+        vault.reinstateAgent();
 
         bytes memory cd = abi.encodeWithSelector(MockTarget.doSomething.selector, 1);
         vm.prank(agent); vault.execute(address(allowedTarget), 0, cd);
@@ -145,6 +163,7 @@ contract PolicyVaultTest is Test {
 
     // ── Whitelist ─────────────────────────────────────────────────────────────
 
+    // testing that a blocked target cannot be executed
     function test_BlockedTarget_Reverts() public {
         bytes memory cd = abi.encodeWithSelector(MockTarget.doSomething.selector, 1);
         vm.prank(agent);
@@ -154,6 +173,7 @@ contract PolicyVaultTest is Test {
 
     // ── Spend cap ─────────────────────────────────────────────────────────────
 
+    // testing that an amount exceeding the spend cap reverts
     function test_AmountExceedsLimit_Reverts() public {
         bytes memory cd = abi.encodeWithSelector(MockTarget.doSomething.selector, 1);
         vm.prank(agent);
@@ -163,6 +183,7 @@ contract PolicyVaultTest is Test {
 
     // ── Cooldown ──────────────────────────────────────────────────────────────
 
+    // testing that the agent cannot execute during the cooldown period
     function test_Cooldown_BlocksSecondCall() public {
         bytes memory cd = abi.encodeWithSelector(MockTarget.doSomething.selector, 1);
         vm.prank(agent); vault.execute(address(allowedTarget), 0, cd);
@@ -173,7 +194,7 @@ contract PolicyVaultTest is Test {
     }
 
     // ── Aave health factor ────────────────────────────────────────────────────
-
+    // test to check health works as expected
     function test_LowHealthFactor_Blocks() public {
         aave.setHealthFactor(1e18); // drop to 1.0 — below floor of 1.5
 
@@ -185,6 +206,7 @@ contract PolicyVaultTest is Test {
 
     // ── Chainlink price floor ─────────────────────────────────────────────────
 
+    // test to check that a price below the floor reverts
     function test_PriceBelowFloor_Blocks() public {
         feed.setPrice(1000e8); // drop ETH to $1000 — below floor of $1500
 
@@ -194,6 +216,7 @@ contract PolicyVaultTest is Test {
         vault.execute(address(allowedTarget), 0, cd);
     }
 
+    // test to check that a stale price feed reverts
     function test_StalePriceFeed_Blocks() public {
         // Set updatedAt to 2 hours ago — exceeds maxPriceAge of 1 hour
         feed.setUpdatedAt(block.timestamp - 2 hours);
@@ -204,6 +227,7 @@ contract PolicyVaultTest is Test {
         vault.execute(address(allowedTarget), 0, cd);
     }
 
+    // test that a price above the floor allows execution
     function test_PriceAboveFloor_Allows() public {
         feed.setPrice(2500e8); // ETH at $2500 — above floor of $1500
 
@@ -223,6 +247,7 @@ contract PolicyVaultTest is Test {
         assertTrue(ok);
     }
 
+    // test that the token balance snapshot event is emitted after a successful execute
     function test_TokenBalanceSnapshot_EmittedAfterExecute() public {
         bytes memory cd = abi.encodeWithSelector(MockTarget.doSomething.selector, 1);
 
@@ -233,6 +258,7 @@ contract PolicyVaultTest is Test {
         vault.execute(address(allowedTarget), 0, cd);
     }
 
+    // test that the ETH sent event is emitted correctly
     function test_ETHSent_Event() public {
         bytes memory cd = abi.encodeWithSelector(MockTarget.doSomething.selector, 1);
 
@@ -246,6 +272,14 @@ contract PolicyVaultTest is Test {
 
     // ── Access control ────────────────────────────────────────────────────────
 
+    // test that only the agent can execute transactions
+    function test_OnlyAgentCanExecute() public {
+        bytes memory cd = abi.encodeWithSelector(MockTarget.doSomething.selector, 1);
+        vm.prank(agent);
+        vault.execute(address(allowedTarget), 0, cd);
+    }
+
+    // test that a non-agent cannot execute transactions
     function test_NonAgent_Reverts() public {
         bytes memory cd = abi.encodeWithSelector(MockTarget.doSomething.selector, 1);
         vm.prank(hacker);
@@ -255,6 +289,7 @@ contract PolicyVaultTest is Test {
 
     // ── Policy updates ────────────────────────────────────────────────────────
 
+    // test that only the owner can update the policy
     function test_OwnerCanUpdatePolicy() public {
         vm.prank(owner);
         vault.setPolicy(1000e6, 1 hours, 12e17, 1200e8);
@@ -262,6 +297,13 @@ contract PolicyVaultTest is Test {
         assertEq(vault.cooldownPeriod(),    1 hours);
         assertEq(vault.healthFactorFloor(), 12e17);
         assertEq(vault.minAssetPriceUSD(),  1200e8);
+    }
+
+    // test that when a non-owner tries to update the policy, it reverts
+    function test_NonOwnerCannotUpdatePolicy() public {
+        vm.prank(hacker);
+        vm.expectRevert(PolicyVault.NotOwner.selector);
+        vault.setPolicy(1000e6, 1 hours, 12e17, 1200e8);
     }
 
     // ── View helpers ──────────────────────────────────────────────────────────
