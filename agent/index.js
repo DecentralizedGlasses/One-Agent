@@ -42,7 +42,20 @@ function logAction(entry) {
 }
 
 // ── Read Aave position ────────────────────────────────────────────────────────
+const IS_LOCAL = (process.env.RPC_URL || "").includes("127.0.0.1") ||
+                 (process.env.RPC_URL || "").includes("localhost");
+
 async function getPosition() {
+  // On local Anvil, Aave doesn't exist — return a realistic mock position
+  if (IS_LOCAL) {
+    return {
+      totalCollateralUSD:  5000,
+      totalDebtUSD:        2000,
+      availableBorrowsUSD: 1500,
+      healthFactor:        2.1,
+      _mock: true,
+    };
+  }
   const [collateral, debt, borrows, , , hf] = await publicClient.readContract({
     address: AAVE_POOL, abi: AAVE_ABI,
     functionName: "getUserAccountData", args: [OWNER_ADDRESS],
@@ -55,8 +68,17 @@ async function getPosition() {
   };
 }
 
-// ── Ask Claude what to do ─────────────────────────────────────────────────────
+// ── Ask Claude what to do (or use mock if no API key) ────────────────────────
 async function askClaude(position) {
+  // Mock mode: if no API key, simulate a Claude decision based on health factor
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.log("[agent] No API key — using mock decision");
+    if (position.healthFactor < 1.8) {
+      return { action: "supply", amount: 200, reason: "Health factor low — supplying 200 USDC to improve position" };
+    }
+    return { action: "none", reason: "Position is healthy — no action needed" };
+  }
+
   const resp = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 256,
@@ -86,15 +108,22 @@ Respond with JSON only: { "action": "supply" | "withdraw" | "none", "amount": <U
 async function submitAction(decision) {
   if (decision.action === "none") return null;
 
+  // Local Anvil: vault's whitelisted target is 0x1 (dummy), Aave doesn't exist.
+  // Simulate the tx going through PolicyVault using the dummy target so the
+  // firewall rules (amount, cooldown, kill-switch) are still exercised.
+  const target = IS_LOCAL ? "0x0000000000000000000000000000000000000001" : AAVE_POOL;
+
   const amountRaw = BigInt(Math.floor((decision.amount ?? 0) * 1e6));
 
-  const callData = decision.action === "supply"
-    ? encodeFunctionData({ abi: AAVE_ABI, functionName: "supply",   args: [USDC, amountRaw, OWNER_ADDRESS, 0] })
-    : encodeFunctionData({ abi: AAVE_ABI, functionName: "withdraw", args: [USDC, amountRaw, OWNER_ADDRESS] });
+  const callData = IS_LOCAL
+    ? "0x"
+    : decision.action === "supply"
+      ? encodeFunctionData({ abi: AAVE_ABI, functionName: "supply",   args: [USDC, amountRaw, OWNER_ADDRESS, 0] })
+      : encodeFunctionData({ abi: AAVE_ABI, functionName: "withdraw", args: [USDC, amountRaw, OWNER_ADDRESS] });
 
   const hash = await walletClient.writeContract({
     address: VAULT_ADDRESS, abi: VAULT_ABI,
-    functionName: "execute", args: [AAVE_POOL, 0n, callData],
+    functionName: "execute", args: [target, 0n, callData],
   });
   return hash;
 }

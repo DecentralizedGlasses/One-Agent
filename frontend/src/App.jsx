@@ -1,9 +1,9 @@
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { injected } from "wagmi/connectors";
 import PositionCard from "./components/PositionCard";
-import PolicyPanel from "./components/PolicyPanel";
-import ActionFeed  from "./components/ActionFeed";
-import KillSwitch  from "./components/KillSwitch";
+import PolicyPanel  from "./components/PolicyPanel";
+import ActionFeed   from "./components/ActionFeed";
+import KillSwitch   from "./components/KillSwitch";
 
 export default function App() {
   const { address, isConnected } = useAccount();
@@ -14,11 +14,11 @@ export default function App() {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="text-center space-y-4">
-          <h1 className="text-3xl font-bold text-brand">AgentGuard</h1>
-          <p className="text-gray-400">On-chain policy firewall for AI DeFi agents</p>
+          <h1 className="text-3xl font-bold text-brand">One-Agent</h1>
+          <p className="text-gray-500">On-chain policy firewall for AI DeFi agents</p>
           <button
             onClick={() => connect({ connector: injected() })}
-            className="px-6 py-3 bg-brand rounded-lg font-semibold hover:bg-indigo-500 transition"
+            className="px-6 py-3 bg-brand text-white rounded-lg font-semibold hover:bg-indigo-500 transition"
           >
             Connect Wallet
           </button>
@@ -31,12 +31,12 @@ export default function App() {
     <div className="min-h-screen p-6 space-y-6 max-w-5xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-brand">AgentGuard</h1>
+        <h1 className="text-2xl font-bold text-brand">One-Agent</h1>
         <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-400">{address?.slice(0, 6)}…{address?.slice(-4)}</span>
+          <span className="text-sm text-gray-500">{address?.slice(0, 6)}…{address?.slice(-4)}</span>
           <button
             onClick={() => disconnect()}
-            className="text-sm text-gray-500 hover:text-gray-300"
+            className="text-sm text-gray-400 hover:text-gray-600"
           >
             Disconnect
           </button>

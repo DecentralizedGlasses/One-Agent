@@ -32,21 +32,21 @@ export default function ActionFeed() {
   }, []);
 
   return (
-    <div className="bg-gray-900 rounded-xl p-5 space-y-4 border border-gray-800">
+    <div className="bg-white rounded-xl p-5 space-y-4 border border-gray-200 shadow-sm">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Agent Action Feed</h2>
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Agent Action Feed</h2>
         <div className="flex gap-2">
           <button
             onClick={triggerRun}
             disabled={loading}
-            className="px-3 py-1 text-xs bg-brand rounded hover:bg-indigo-500 disabled:opacity-40 transition"
+            className="px-3 py-1 text-xs bg-brand text-white rounded hover:bg-indigo-500 disabled:opacity-40 transition"
           >
             Run Agent
           </button>
           <button
             onClick={triggerViolation}
             disabled={loading}
-            className="px-3 py-1 text-xs bg-red-800 rounded hover:bg-red-700 disabled:opacity-40 transition"
+            className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-500 disabled:opacity-40 transition"
           >
             Demo Violation
           </button>
@@ -55,7 +55,7 @@ export default function ActionFeed() {
 
       <div className="space-y-2 max-h-80 overflow-y-auto">
         {log.length === 0 && (
-          <p className="text-sm text-gray-600">No actions yet — click "Run Agent" to start.</p>
+          <p className="text-sm text-gray-400">No actions yet — click "Run Agent" to start.</p>
         )}
         {log.map((entry, i) => (
           <LogEntry key={i} entry={entry} />
@@ -71,21 +71,21 @@ function LogEntry({ entry }) {
 
   return (
     <div className={`flex items-start gap-3 p-3 rounded-lg text-sm ${
-      isAllowed ? "bg-green-950 border border-green-900"
-      : isBlocked ? "bg-red-950 border border-red-900"
-      : "bg-gray-800 border border-gray-700"
+      isAllowed ? "bg-green-50 border border-green-200"
+      : isBlocked ? "bg-red-50 border border-red-200"
+      : "bg-gray-50 border border-gray-200"
     }`}>
       <span className="text-lg">{isAllowed ? "✓" : isBlocked ? "✗" : "?"}</span>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className={`text-xs font-bold uppercase ${
-            isAllowed ? "text-green-400" : isBlocked ? "text-red-400" : "text-gray-400"
+            isAllowed ? "text-green-700" : isBlocked ? "text-red-700" : "text-gray-500"
           }`}>
             {entry.status}
           </span>
-          <span className="text-xs text-gray-600">{new Date(entry.ts).toLocaleTimeString()}</span>
+          <span className="text-xs text-gray-400">{new Date(entry.ts).toLocaleTimeString()}</span>
         </div>
-        <p className="text-gray-300 truncate">
+        <p className="text-gray-700 truncate">
           {entry.decision?.action
             ? `${entry.decision.action} ${entry.decision.amount ?? ""} USDC — ${entry.decision.reason}`
             : entry.reason ?? "—"}

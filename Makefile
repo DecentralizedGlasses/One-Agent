@@ -1,6 +1,6 @@
 -include .env
 
-.PHONY: build test deploy-local deploy-testnet clean install format
+.PHONY: build test deploy-local deploy-testnet deploy-sepolia deploy-sepolia-verify clean install format
 
 # ── Build ──────────────────────────────────────────────────────────────────────
 build:
@@ -51,6 +51,22 @@ deploy-testnet:
 deploy-verify:
 	forge script script/Deploy.s.sol \
 		--rpc-url https://sepolia.base.org \
+		--broadcast \
+		--verify \
+		--etherscan-api-key $(ETHERSCAN_API_KEY) \
+		-v
+
+# Deploy to Ethereum Sepolia
+deploy-sepolia:
+	forge script script/DeploySepolia.s.sol \
+		--rpc-url $(SEPOLIA_RPC_URL) \
+		--broadcast \
+		-v
+
+# Deploy to Ethereum Sepolia and verify on Etherscan
+deploy-sepolia-verify:
+	forge script script/DeploySepolia.s.sol \
+		--rpc-url $(SEPOLIA_RPC_URL) \
 		--broadcast \
 		--verify \
 		--etherscan-api-key $(ETHERSCAN_API_KEY) \
@@ -133,7 +149,7 @@ frontend-build:
 # ── Help ───────────────────────────────────────────────────────────────────────
 help:
 	@echo ""
-	@echo "AgentGuard — available commands"
+	@echo "One-Agent — available commands"
 	@echo "────────────────────────────────────────────"
 	@echo "  make build              Build contracts"
 	@echo "  make test               Run all 25 tests"
@@ -148,6 +164,8 @@ help:
 	@echo "  make deploy-local       Deploy to Anvil"
 	@echo "  make deploy-testnet     Deploy to Base Sepolia"
 	@echo "  make deploy-verify      Deploy + verify on Basescan"
+	@echo "  make deploy-sepolia     Deploy to Ethereum Sepolia"
+	@echo "  make deploy-sepolia-verify  Deploy + verify on Etherscan"
 	@echo "────────────────────────────────────────────"
 	@echo "  make wallet-new         Generate new keypair"
 	@echo "  make balance ADDR=0x... Check ETH balance"

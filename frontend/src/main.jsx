@@ -1,14 +1,18 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { WagmiProvider, createConfig, http } from "wagmi";
-import { baseSepolia } from "wagmi/chains";
+import { sepolia, baseSepolia, localhost } from "wagmi/chains";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
 import "./index.css";
 
 const wagmiConfig = createConfig({
-  chains: [baseSepolia],
-  transports: { [baseSepolia.id]: http() },
+  chains: [sepolia, baseSepolia, localhost],
+  transports: {
+    [sepolia.id]:     http(),
+    [baseSepolia.id]: http(),
+    [localhost.id]:   http("http://127.0.0.1:8545"),
+  },
 });
 
 const queryClient = new QueryClient();
