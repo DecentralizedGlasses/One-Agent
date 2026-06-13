@@ -28,10 +28,10 @@ export default function PolicyPanel() {
       abi: VAULT_ABI,
       functionName: "setPolicy",
       args: [
-        BigInt(Math.floor(Number(maxTx      || currentMax)   * 1e6)),
-        BigInt(Number(cooldown || currentCd) * 60),
-        BigInt(Math.floor(Number(hfFloor    || currentHf)    * 1e18)),
-        BigInt(Math.floor(Number(priceFloor || currentPrice) * 1e8)),
+        BigInt(Math.floor(Number(maxTx)      * 1e6)),
+        BigInt(Number(cooldown)              * 60),
+        BigInt(Math.floor(Number(hfFloor)    * 1e18)),
+        BigInt(Math.floor(Number(priceFloor) * 1e8)),
       ],
     }, {
       onSuccess: () => {
@@ -98,7 +98,7 @@ export default function PolicyPanel() {
 
       <button
         onClick={savePolicy}
-        disabled={isPending}
+        disabled={isPending || !maxTx || !cooldown || !hfFloor || !priceFloor}
         className="px-4 py-2 bg-brand rounded-lg text-sm font-semibold hover:bg-indigo-500 disabled:opacity-40 transition text-white"
       >
         {isPending ? "Saving…" : "Save Policy"}
