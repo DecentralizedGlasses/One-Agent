@@ -81,7 +81,7 @@ export default function App() {
             onClick={toggleTheme}
             className="px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm text-gray-700 hover:bg-gray-100 transition dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
           >
-            {theme === "dark" ? "Light Mode" : "Dark Mode"}
+            {theme === "dark" ? "☀" : "☾"}
           </button>
           <span className="text-sm text-gray-500 dark:text-slate-300">{address?.slice(0, 6)}…{address?.slice(-4)}</span>
           <button
