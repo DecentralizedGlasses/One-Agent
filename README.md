@@ -41,85 +41,112 @@ PolicyVault.sol  ◄──── AI Agent (Node.js + Claude API)
 |---------|---------|
 | Ethereum Sepolia | `0xBD54dEDEb7456552516CB7CE43a6e5F00df5Ea89` |
 
-## Prerequisites
+---
+
+## Running Locally
+
+### Prerequisites
 
 - [Foundry](https://getfoundry.sh) — `curl -L https://foundry.paradigm.xyz | bash`
 - [Node.js](https://nodejs.org) v18+
-- MetaMask with Ethereum Sepolia network added
+- MetaMask with Ethereum Sepolia and Base Sepolia networks added
 
-## Running locally
-
-### 1. Clone and install
+### Step 1 — Clone
 
 ```bash
 git clone https://github.com/DecentralizedGlasses/One-Agent.git
 cd One-Agent
 ```
 
-### 2. Set up environment variables
+### Step 2 — Root `.env`
 
-Create a `.env` file in the root:
+Create a `.env` file in the project root:
 
 ```env
-PRIVATE_KEY=0xYOUR_WALLET_PRIVATE_KEY      # owner wallet
-AGENT_ADDRESS=0xYOUR_AGENT_WALLET_ADDRESS   # agent wallet (separate)
-ANTHROPIC_API_KEY=                          # optional — uses mock mode if empty
-SEPOLIA_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/YOUR_KEY
-RPC_URL=http://127.0.0.1:8545              # local Anvil
+# Owner wallet private key (the wallet that deploys the vault)
+PRIVATE_KEY=0xYOUR_OWNER_PRIVATE_KEY
+
+# Agent wallet address (a separate wallet the vault will authorize)
+AGENT_ADDRESS=0xYOUR_AGENT_WALLET_ADDRESS
+
+# Owner wallet address
+OWNER_ADDRESS=0xYOUR_OWNER_WALLET_ADDRESS
+
+# Anthropic API key — leave empty to run in mock mode (no key needed for demo)
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Alchemy RPC URLs
+SEPOLIA_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/YOUR_ALCHEMY_KEY
+BASE_SEPOLIA_RPC_URL=https://base-sepolia.g.alchemy.com/v2/YOUR_ALCHEMY_KEY
+RPC_URL=http://127.0.0.1:8545
+
+# Deployed vault address (fill in after deploying)
+POLICY_VAULT_ADDRESS=0xYOUR_VAULT_ADDRESS
 ```
 
-Create `frontend/.env`:
+### Step 3 — Frontend `.env`
+
+Create a `frontend/.env` file:
 
 ```env
+# Deployed vault contract address
 VITE_VAULT_ADDRESS=0xYOUR_VAULT_ADDRESS
+
+# Agent backend URL (local)
 VITE_AGENT_URL=http://localhost:3001
+
+# Alchemy RPC URLs (same keys as root .env)
+VITE_SEPOLIA_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/YOUR_ALCHEMY_KEY
+VITE_BASE_SEPOLIA_RPC_URL=https://base-sepolia.g.alchemy.com/v2/YOUR_ALCHEMY_KEY
 ```
 
-### 3. Install contract dependencies
+> Get a free Alchemy key at [alchemy.com](https://alchemy.com).
+
+### Step 4 — Install dependencies
 
 ```bash
+# Smart contract dependencies
 forge install
+
+# Agent backend
+cd agent && npm install && cd ..
+
+# Frontend
+cd frontend && npm install && cd ..
 ```
 
-### 4. Run tests
+### Step 5 — Deploy the vault
+
+**Option A — Local Anvil (no real ETH needed):**
 
 ```bash
-make test
-```
-
-All 25 tests should pass.
-
-### 5. Start a local chain
-
-```bash
+# Terminal 1: start local chain
 make anvil
-```
 
-### 6. Deploy locally
-
-In a new terminal:
-
-```bash
+# Terminal 2: deploy
 make deploy-local
 ```
 
-Copy the printed vault address into `frontend/.env` as `VITE_VAULT_ADDRESS`.
-
-### 7. Start the agent backend
+**Option B — Ethereum Sepolia (real testnet):**
 
 ```bash
-cd agent && npm install
-POLICY_VAULT_ADDRESS=0xYOUR_VAULT_ADDRESS \
-OWNER_ADDRESS=0xYOUR_OWNER_ADDRESS \
-node index.js
+make deploy-sepolia
 ```
 
-> If `ANTHROPIC_API_KEY` is empty, the agent runs in mock mode and simulates decisions based on the health factor — no API key needed for local demo.
+Copy the printed vault address into both `.env` files as `POLICY_VAULT_ADDRESS` and `VITE_VAULT_ADDRESS`.
 
-### 8. Start the frontend
+### Step 6 — Start the agent backend
 
 ```bash
-cd frontend && npm install && npm run dev
+cd agent && npm start
+```
+
+The agent listens on `http://localhost:3001`. If `ANTHROPIC_API_KEY` is empty it runs in mock mode — simulating decisions based on health factor, no API key required.
+
+### Step 7 — Start the frontend
+
+```bash
+cd frontend && npm run dev
 ```
 
 Open [http://localhost:5173](http://localhost:5173) and connect MetaMask.
@@ -133,23 +160,52 @@ Then import the Anvil owner key (dev only — never use on mainnet):
 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 ```
 
-## Deploying to Ethereum Sepolia
+---
 
-1. Fund your wallet with Sepolia ETH — [faucet.quicknode.com](https://faucet.quicknode.com)
-2. Set `PRIVATE_KEY` and `SEPOLIA_RPC_URL` in `.env`
-3. Deploy:
+## Deploying to Production
 
-```bash
-make deploy-sepolia
-```
+The frontend and agent backend are deployed separately — the frontend goes to Vercel, the agent to Railway.
 
-Or deploy and verify on Etherscan:
+### Frontend → Vercel
 
-```bash
-make deploy-sepolia-verify
-```
+1. Go to [vercel.com](https://vercel.com) → New Project → import this repo
+2. Vercel auto-detects `vercel.json` — no build settings changes needed
+3. Add these **Environment Variables** before deploying:
 
-4. Update `frontend/.env` with the new vault address and restart the frontend.
+| Variable | Value |
+|---|---|
+| `VITE_VAULT_ADDRESS` | `0xBD54dEDEb7456552516CB7CE43a6e5F00df5Ea89` |
+| `VITE_SEPOLIA_RPC_URL` | `https://eth-sepolia.g.alchemy.com/v2/YOUR_KEY` |
+| `VITE_BASE_SEPOLIA_RPC_URL` | `https://base-sepolia.g.alchemy.com/v2/YOUR_KEY` |
+| `VITE_AGENT_URL` | your Railway agent URL (add after deploying agent) |
+
+4. Click Deploy → your site is live
+
+### Agent Backend → Railway
+
+1. Go to [railway.app](https://railway.app) → New Project → Deploy from GitHub repo
+2. Select this repo → set **Root Directory** to `agent`
+3. Add these **Environment Variables** in Railway:
+
+| Variable | Value |
+|---|---|
+| `ANTHROPIC_API_KEY` | `sk-ant-...` |
+| `PRIVATE_KEY` | agent wallet private key |
+| `POLICY_VAULT_ADDRESS` | `0xBD54dEDEb7456552516CB7CE43a6e5F00df5Ea89` |
+| `OWNER_ADDRESS` | your owner wallet address |
+| `BASE_SEPOLIA_RPC_URL` | `https://base-sepolia.g.alchemy.com/v2/YOUR_KEY` |
+| `RPC_URL` | `https://eth-sepolia.g.alchemy.com/v2/YOUR_KEY` |
+
+4. Deploy → go to **Settings → Networking → Generate Domain** to get your public URL
+5. Add that URL as `VITE_AGENT_URL` in Vercel → Redeploy
+
+### Vercel — disable login protection
+
+By default Vercel may require visitors to log in. To make the site public:
+
+Settings → **Deployment Protection** → disable or set to **No Protection**
+
+---
 
 ## Makefile reference
 
@@ -168,15 +224,14 @@ make deploy-local           Deploy to Anvil
 make deploy-sepolia         Deploy to Ethereum Sepolia
 make deploy-sepolia-verify  Deploy + verify on Etherscan
 
-make agent-dev              Start agent backend
+make agent-dev              Start agent backend (watch mode)
 make frontend-dev           Start frontend dev server
 ```
 
 ## Sponsor integrations
 
-- **Chainlink** — ETH/USD price feed (`0x694AA1769357215DE4FAC081bf1f309aDC325306`) enforced as Rule 6 on every agent action
-- **Aave v3** — health factor read from live position as Rule 5
-- **ENS** — wallet address resolution in the frontend
+- **Chainlink** — ETH/USD price feed (`0x694AA1769357215DE4FAC081bf1f309aDC325306`) enforced as Rule 6 on every agent action. See [`src/PolicyVault.sol#L226`](src/PolicyVault.sol)
+- **Aave v3** — health factor read from live position as Rule 5 (Base Sepolia pool `0x8bAB6d1b75f19e9eD9fCe8b9BD338844fF79aE27`)
 
 ## License
 
