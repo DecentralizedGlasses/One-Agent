@@ -29,7 +29,6 @@ export default function KillSwitch({ optimisticRevoked, setOptimisticRevoked, re
   const isRevoked      = optimisticRevoked !== null ? optimisticRevoked : onChainRevoked;
   const agent          = policy?.[0];
   const allowedTargets = policy?.[6] ?? [];
-  const busy           = isPending;
 
   function revoke() {
     setOptimisticRevoked(true);
@@ -39,9 +38,7 @@ export default function KillSwitch({ optimisticRevoked, setOptimisticRevoked, re
       chainId: VAULT_CHAIN_ID,
       functionName: "emergencyRevoke",
       args: [],
-    }, {
-      onError: () => setOptimisticRevoked(null),
-    });
+    }, { onError: () => setOptimisticRevoked(null) });
   }
 
   function reinstate() {
@@ -52,9 +49,7 @@ export default function KillSwitch({ optimisticRevoked, setOptimisticRevoked, re
       chainId: VAULT_CHAIN_ID,
       functionName: "reinstateAgent",
       args: [],
-    }, {
-      onError: () => setOptimisticRevoked(null),
-    });
+    }, { onError: () => setOptimisticRevoked(null) });
   }
 
   if (isRevoked) {
@@ -93,7 +88,7 @@ export default function KillSwitch({ optimisticRevoked, setOptimisticRevoked, re
 
         <button
           onClick={reinstate}
-          disabled={busy || !isConnected}
+          disabled={isPending || !isConnected}
           className="w-full py-3 rounded-lg font-bold text-sm bg-green-600 hover:bg-green-500 text-white transition disabled:opacity-40"
         >
           {isPending ? "Confirm in MetaMask…" : "Reinstate Agent"}
@@ -105,16 +100,13 @@ export default function KillSwitch({ optimisticRevoked, setOptimisticRevoked, re
   return (
     <div className="bg-white dark:bg-slate-900 rounded-xl p-5 flex flex-col items-center justify-center gap-4 border border-gray-200 dark:border-slate-700 shadow-sm">
       <p className="text-sm text-gray-500 dark:text-slate-400 font-semibold uppercase tracking-wider">Kill Switch</p>
-
       <div className={`w-4 h-4 rounded-full ${isLoading ? "bg-yellow-400 animate-pulse" : "bg-green-500 animate-pulse"}`} />
-
       <p className="text-xs font-semibold uppercase text-gray-500 dark:text-slate-300">
         {isLoading ? "Checking vault…" : "Agent active"}
       </p>
-
       <button
         onClick={revoke}
-        disabled={busy || !isConnected}
+        disabled={isPending || !isConnected}
         className="w-full py-3 rounded-lg font-bold text-sm bg-red-600 hover:bg-red-500 text-white transition disabled:opacity-40"
       >
         {isPending ? "Confirm in MetaMask…" : "Emergency Revoke"}

@@ -15,7 +15,6 @@ export default function PolicyPanel() {
   const { isLoading: isConfirming } = useWaitForTransactionReceipt({
     hash: txHash,
     chainId: VAULT_CHAIN_ID,
-    onReplaced: () => refetch(),
     query: {
       enabled: !!txHash,
       onSuccess: () => {
@@ -63,10 +62,10 @@ export default function PolicyPanel() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-        <Field label="Max Tx Amount (USDC)" current={currentMax} value={maxTx} onChange={setMaxTx} placeholder={currentMax} step="1" />
-        <Field label="Cooldown (minutes)"   current={currentCd}  value={cooldown} onChange={setCooldown} placeholder={currentCd} integersOnly />
-        <Field label="Health Factor Floor"  current={currentHf}  value={hfFloor} onChange={setHfFloor} placeholder={currentHf} step="0.01" />
-        <Field label="ETH Price Floor (USD)" current={`$${currentPrice}`} value={priceFloor} onChange={setPriceFloor} placeholder={currentPrice} step="1" />
+        <Field label="Max Tx Amount (USDC)"  current={currentMax}        value={maxTx}      onChange={setMaxTx}      placeholder={currentMax}   step="1" />
+        <Field label="Cooldown (minutes)"    current={currentCd}         value={cooldown}   onChange={setCooldown}   placeholder={currentCd}    integersOnly />
+        <Field label="Health Factor Floor"   current={currentHf}         value={hfFloor}    onChange={setHfFloor}    placeholder={currentHf}    step="0.01" />
+        <Field label="ETH Price Floor (USD)" current={`$${currentPrice}`} value={priceFloor} onChange={setPriceFloor} placeholder={currentPrice}  step="1" />
       </div>
 
       <div className="space-y-2">
