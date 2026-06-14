@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { useAccount, useDisconnect } from "wagmi";
-import { DynamicWidget } from "@dynamic-labs/sdk-react-core";
+import { useAccount, useConnect, useDisconnect } from "wagmi";
+import { injected } from "wagmi/connectors";
 import PositionCard from "./components/PositionCard";
 import PolicyPanel  from "./components/PolicyPanel";
 import ActionFeed   from "./components/ActionFeed";
@@ -10,6 +10,7 @@ import WalletStatus from "./components/WalletStatus";
 export default function App() {
   const [theme, setTheme] = useState("light");
   const { address, isConnected } = useAccount();
+  const { connect }    = useConnect();
   const { disconnect } = useDisconnect();
 
   useEffect(() => {
@@ -42,7 +43,12 @@ export default function App() {
         <div className="text-center space-y-6">
           <h1 className="text-3xl font-bold text-brand">One-Agent</h1>
           <p className="text-gray-500 dark:text-slate-300">On-chain policy firewall for AI DeFi agents</p>
-          <DynamicWidget />
+          <button
+            onClick={() => connect({ connector: injected() })}
+            className="px-6 py-3 bg-brand text-white rounded-lg font-semibold hover:bg-indigo-500 transition"
+          >
+            Connect Wallet
+          </button>
         </div>
       </div>
     );
@@ -63,7 +69,12 @@ export default function App() {
             {theme === "dark" ? "☾" : "☀"}
           </button>
           <span className="text-sm text-gray-500 dark:text-slate-300">{address?.slice(0, 6)}…{address?.slice(-4)}</span>
-          <DynamicWidget />
+          <button
+            onClick={() => disconnect()}
+            className="text-sm text-gray-400 hover:text-gray-600 dark:text-slate-300 dark:hover:text-slate-100"
+          >
+            Disconnect
+          </button>
         </div>
       </div>
 
