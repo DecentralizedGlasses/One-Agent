@@ -1,1 +1,0 @@
-import{dm as r,dl as c,dn as o}from"./index-DhyE-hSm.js";const y=async e=>{const i=r.getPublicKey(e.privateKey,!0),t=c(i);if(t!=e.publicKey)throw new Error(`Bad API key. Expected to get public key ${e.publicKey}, got ${t}`);const s=o().update(e.content).digest();return r.sign(s,e.privateKey).toDERHex()};export{y as signWithApiKey};
