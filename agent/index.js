@@ -196,7 +196,8 @@ app.get("/log",       (_, res) => res.json(actionLog));
 app.post("/run",      async (_, res) => res.json(await runCycle(false)));
 app.post("/run-demo", async (_, res) => res.json(await runCycle(true)));
 
-app.listen(3001, () => console.log("[agent] listening on :3001"));
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => console.log(`[agent] listening on :${PORT}`));
 
 // ── Background monitor ────────────────────────────────────────────────────────
 // Checks position every 60s. If HF drops below 1.5, logs an alert in the

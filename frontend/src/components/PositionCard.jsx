@@ -1,23 +1,40 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useAccount, useReadContract } from "wagmi";
+import { baseSepolia } from "wagmi/chains";
+import { parseAbi } from "viem";
 
-const AGENT_URL = import.meta.env.VITE_AGENT_URL || "http://localhost:3001";
+const AAVE_POOL = "0x8bAB6d1b75f19e9eD9fCe8b9BD338844fF79aE27"; // Base Sepolia Aave V3
+const AAVE_ABI = parseAbi([
+  "function getUserAccountData(address user) external view returns (uint256,uint256,uint256,uint256,uint256,uint256)",
+]);
+
+const MAX_UINT256 = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
 
 export default function PositionCard({ onPosition }) {
-  const [position, setPosition] = useState(null);
+  const { address, isConnected } = useAccount();
+
+  const { data, isLoading } = useReadContract({
+    address: AAVE_POOL,
+    abi: AAVE_ABI,
+    functionName: "getUserAccountData",
+    args: [address],
+    chainId: baseSepolia.id,
+    query: { enabled: isConnected && !!address, refetchInterval: 15000 },
+  });
+
+  const position = data
+    ? {
+        totalCollateralUSD:  Number(data[0]) / 1e8,
+        totalDebtUSD:        Number(data[1]) / 1e8,
+        availableBorrowsUSD: Number(data[2]) / 1e8,
+        // Aave returns type(uint256).max when there's no debt (infinite health)
+        healthFactor: data[5] >= MAX_UINT256 ? null : Number(data[5]) / 1e18,
+      }
+    : null;
 
   useEffect(() => {
-    let cancelled = false;
-    async function fetch_() {
-      try {
-        const res  = await fetch(`${AGENT_URL}/position`);
-        const data = await res.json();
-        if (!cancelled) { setPosition(data); onPosition?.(data); }
-      } catch { /* agent not running */ }
-    }
-    fetch_();
-    const id = setInterval(fetch_, 15000);
-    return () => { cancelled = true; clearInterval(id); };
-  }, []);
+    if (position) onPosition?.(position);
+  }, [data]);
 
   const collateral = position?.totalCollateralUSD ?? null;
   const debt       = position?.totalDebtUSD ?? null;
@@ -26,13 +43,18 @@ export default function PositionCard({ onPosition }) {
   const hfColor    = hf === null ? "text-gray-400" : hf >= 2 ? "text-green-700" : hf >= 1.5 ? "text-yellow-600" : "text-red-600";
   const barColor   = hf === null ? "bg-gray-300" : hf >= 2 ? "bg-green-700" : hf >= 1.5 ? "bg-yellow-500" : "bg-red-500";
 
+  const hasPosition = position && (position.totalCollateralUSD > 0 || position.totalDebtUSD > 0);
+
   return (
     <div className="bg-white rounded-2xl border border-gray-200 p-5">
       <div className="flex items-center gap-2 mb-4">
         <span className="text-lg">🏛</span>
-        <h2 className="text-base font-semibold text-gray-900">Aave positions</h2>
-        {position?._mock && (
-          <span className="ml-auto text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">mock</span>
+        <h2 className="text-base font-semibold text-gray-900">Aave position</h2>
+        {isLoading && (
+          <span className="ml-auto text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">loading…</span>
+        )}
+        {!isLoading && position && !hasPosition && (
+          <span className="ml-auto text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">no position</span>
         )}
       </div>
 
@@ -60,9 +82,9 @@ export default function PositionCard({ onPosition }) {
           valueClass="text-gray-900"
         />
         <PositionRow
-          label="USDC borrowed"
+          label="Debt"
           value={debt !== null ? `$${debt.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "—"}
-          sub="debt"
+          sub="borrowed"
           valueClass="text-red-600"
         />
         <PositionRow
@@ -83,6 +105,10 @@ export default function PositionCard({ onPosition }) {
           </div>
         </div>
       </div>
+
+      <p className="mt-3 text-xs text-gray-400">
+        Base Sepolia · Aave V3 · updates every 15s
+      </p>
     </div>
   );
 }
