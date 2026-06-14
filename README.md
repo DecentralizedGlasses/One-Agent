@@ -31,15 +31,15 @@ PolicyVault.sol  ◄──── AI Agent (Node.js + Claude API)
    Aave v3 / DeFi Protocols
 ```
 
-- **Smart contract** — `src/PolicyVault.sol` — Solidity 0.8.20, deployed on Ethereum Sepolia
+- **Smart contract** — `src/PolicyVault.sol` — Solidity 0.8.20, deployed on Base Sepolia
 - **Agent backend** — `agent/index.js` — Express server, calls Claude API, submits actions through the vault
 - **Dashboard** — `frontend/` — React + Vite + Tailwind + wagmi, reads live on-chain state
 
 ## Deployed Contract
 
-| Network | Address |
-|---------|---------|
-| Ethereum Sepolia | `0xBD54dEDEb7456552516CB7CE43a6e5F00df5Ea89` |
+| Network | Address | Explorer |
+|---------|---------|---------|
+| Base Sepolia | `0x1A34Cd8B9F84a2fF2ee146962F36949CAC121CA6` | [View on Basescan](https://sepolia.basescan.org/address/0x1a34cd8b9f84a2ff2ee146962f36949cac121ca6#code) |
 
 ---
 
@@ -174,8 +174,7 @@ The frontend and agent backend are deployed separately — the frontend goes to 
 
 | Variable | Value |
 |---|---|
-| `VITE_VAULT_ADDRESS` | `0xBD54dEDEb7456552516CB7CE43a6e5F00df5Ea89` |
-| `VITE_SEPOLIA_RPC_URL` | `https://eth-sepolia.g.alchemy.com/v2/YOUR_KEY` |
+| `VITE_VAULT_ADDRESS` | `0x1A34Cd8B9F84a2fF2ee146962F36949CAC121CA6` |
 | `VITE_BASE_SEPOLIA_RPC_URL` | `https://base-sepolia.g.alchemy.com/v2/YOUR_KEY` |
 | `VITE_AGENT_URL` | your Railway agent URL (add after deploying agent) |
 
@@ -191,10 +190,9 @@ The frontend and agent backend are deployed separately — the frontend goes to 
 |---|---|
 | `ANTHROPIC_API_KEY` | `sk-ant-...` |
 | `PRIVATE_KEY` | agent wallet private key |
-| `POLICY_VAULT_ADDRESS` | `0xBD54dEDEb7456552516CB7CE43a6e5F00df5Ea89` |
+| `POLICY_VAULT_ADDRESS` | `0x1A34Cd8B9F84a2fF2ee146962F36949CAC121CA6` |
 | `OWNER_ADDRESS` | your owner wallet address |
 | `BASE_SEPOLIA_RPC_URL` | `https://base-sepolia.g.alchemy.com/v2/YOUR_KEY` |
-| `RPC_URL` | `https://eth-sepolia.g.alchemy.com/v2/YOUR_KEY` |
 
 4. Deploy → go to **Settings → Networking → Generate Domain** to get your public URL
 5. Add that URL as `VITE_AGENT_URL` in Vercel → Redeploy
@@ -222,7 +220,7 @@ make test-rule6             Chainlink price tests
 make anvil                  Start local Anvil chain
 make deploy-local           Deploy to Anvil
 make deploy-sepolia         Deploy to Ethereum Sepolia
-make deploy-sepolia-verify  Deploy + verify on Etherscan
+make deploy-base-sepolia    Deploy to Base Sepolia
 
 make agent-dev              Start agent backend (watch mode)
 make frontend-dev           Start frontend dev server
@@ -230,7 +228,7 @@ make frontend-dev           Start frontend dev server
 
 ## Sponsor integrations
 
-- **Chainlink** — ETH/USD price feed (`0x694AA1769357215DE4FAC081bf1f309aDC325306`) enforced as Rule 6 on every agent action. See [`src/PolicyVault.sol#L226`](src/PolicyVault.sol)
+- **Chainlink** — ETH/USD price feed on Base Sepolia (`0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1`) enforced as Rule 6 on every agent action. See [`src/PolicyVault.sol#L224-L232`](https://github.com/DecentralizedGlasses/One-Agent/blob/main/src/PolicyVault.sol#L224-L232)
 - **Aave v3** — health factor read from live position as Rule 5 (Base Sepolia pool `0x8bAB6d1b75f19e9eD9fCe8b9BD338844fF79aE27`)
 
 ## License
