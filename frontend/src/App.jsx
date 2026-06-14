@@ -68,7 +68,9 @@ export default function App() {
           >
             {theme === "dark" ? "☾" : "☀"}
           </button>
-          <span className="text-sm text-gray-500 dark:text-slate-300">{address?.slice(0, 6)}…{address?.slice(-4)}</span>
+          <span className="text-sm text-gray-500 dark:text-slate-300">
+            {address?.slice(0, 6)}…{address?.slice(-4)}
+          </span>
           <button
             onClick={() => disconnect()}
             className="text-sm text-gray-400 hover:text-gray-600 dark:text-slate-300 dark:hover:text-slate-100"

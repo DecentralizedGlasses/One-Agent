@@ -180,14 +180,72 @@ async function runViolation() {
   }
 }
 
+// ── Demo: spend cap violation ($600 > $500 limit) ────────────────────────────
+async function runSpendCapViolation() {
+  try {
+    const overAmount = BigInt(600e6);
+    await walletClient.writeContract({
+      address: VAULT_ADDRESS, abi: VAULT_ABI,
+      functionName: "execute", args: [AAVE_POOL, overAmount, "0x"],
+    });
+  } catch (err) {
+    logAction({ status: "blocked", reason: "SpendCapExceeded — $600 requested, $500 limit", decision: { action: "liquidate", amount: 600 } });
+    return { blocked: true, reason: err.message };
+  }
+}
+
+// ── Demo: rogue agent tries to send $1000 USDC to an external wallet ─────────
+async function runRogueTransfer(targetAddress, amount) {
+  const label = `${targetAddress.slice(0, 6)}…${targetAddress.slice(-4)}`;
+  const rawAmount = BigInt(Math.floor(amount * 1e6));
+
+  try {
+    const callData = encodeFunctionData({
+      abi: AAVE_ABI,
+      functionName: "withdraw",
+      args: [USDC, rawAmount, targetAddress],
+    });
+
+    await walletClient.writeContract({
+      address: VAULT_ADDRESS, abi: VAULT_ABI,
+      functionName: "execute", args: [AAVE_POOL, rawAmount, callData],
+    });
+
+    logAction({
+      status: "allowed",
+      reason: `Transfer of $${amount} USDC to ${label} executed`,
+      decision: { action: "transfer", amount },
+    });
+    return { blocked: false };
+  } catch (err) {
+    const rule = err.message?.includes("AmountExceedsLimit") ? "SpendCap"
+               : err.message?.includes("Revoked")           ? "KillSwitch"
+               : err.message?.includes("CooldownActive")    ? "Cooldown"
+               : err.message?.includes("TargetNotAllowed")  ? "Whitelist"
+               : "PolicyVault";
+
+    logAction({
+      status: "blocked",
+      reason: `[${rule}] AI agent tried to send $${amount} USDC to ${label} — blocked on-chain`,
+      decision: { action: "transfer", amount },
+    });
+    return { blocked: true, rule, requested: amount, limit: 500 };
+  }
+}
+
 // ── Express API ───────────────────────────────────────────────────────────────
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.get("/position",  async (_, res) => res.json(await getPosition().catch(e => ({ error: e.message }))));
-app.get("/log",       (_, res) => res.json(actionLog));
-app.post("/run",      async (_, res) => res.json(await runCycle()));
-app.post("/violate",  async (_, res) => res.json(await runViolation()));
+app.get("/position",      async (_, res) => res.json(await getPosition().catch(e => ({ error: e.message }))));
+app.get("/log",           (_, res) => res.json(actionLog));
+app.post("/run",          async (_, res) => res.json(await runCycle()));
+app.post("/violate",      async (_, res) => res.json(await runViolation()));
+app.post("/violate-cap",  async (_, res) => res.json(await runSpendCapViolation()));
+app.post("/rogue-transfer", async (req, res) => {
+  const { target = "0x000000000000000000000000000000000000dEaD", amount = 1000 } = req.body;
+  res.json(await runRogueTransfer(target, amount));
+});
 
 app.listen(3001, () => console.log("[agent] listening on :3001"));
