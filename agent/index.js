@@ -2,21 +2,23 @@ import "dotenv/config";
 import Anthropic from "@anthropic-ai/sdk";
 import { createPublicClient, createWalletClient, http, encodeFunctionData, parseAbi } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { sepolia } from "viem/chains";
+import { sepolia, baseSepolia } from "viem/chains";
 import express from "express";
 import cors from "cors";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const VAULT_ADDRESS  = process.env.POLICY_VAULT_ADDRESS;
 const OWNER_ADDRESS  = process.env.OWNER_ADDRESS;
-const AAVE_POOL      = "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951"; // Ethereum Sepolia
-const USDC           = "0x94a9D9AC8a22534E3FaCa9F4e7F2E2cf85d5E4C8"; // Ethereum Sepolia
+const AAVE_POOL      = "0x8bAB6d1b75f19e9eD9fCe8b9BD338844fF79aE27"; // Base Sepolia
+const USDC           = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"; // Base Sepolia USDC
 const GEMINI_MODEL   = process.env.GEMINI_MODEL || "gemini-2.0-flash";
 
-const account      = privateKeyToAccount(process.env.PRIVATE_KEY);
-const transport    = http(process.env.RPC_URL || "https://rpc.sepolia.org");
-const publicClient = createPublicClient({ chain: sepolia, transport });
-const walletClient = createWalletClient({ account, chain: sepolia, transport });
+const account        = privateKeyToAccount(process.env.PRIVATE_KEY);
+// Separate clients: position reads from Base Sepolia, vault txs to Ethereum Sepolia
+const baseTransport  = http(process.env.BASE_SEPOLIA_RPC_URL || "https://base-sepolia.drpc.org");
+const sepoliaTransport = http(process.env.RPC_URL || "https://rpc.sepolia.org");
+const publicClient   = createPublicClient({ chain: baseSepolia, transport: baseTransport });
+const walletClient   = createWalletClient({ account, chain: sepolia, transport: sepoliaTransport });
 
 // ── ABIs ──────────────────────────────────────────────────────────────────────
 const VAULT_ABI = parseAbi([
@@ -85,7 +87,7 @@ async function askClaude(position) {
     max_tokens: 256,
     messages: [{
       role: "user",
-      content: `You are an AI DeFi agent managing an Aave v3 position on Ethereum Sepolia.
+      content: `You are an AI DeFi agent managing an Aave v3 position on Base Sepolia.
 
 Current position:
 - Collateral: $${position.totalCollateralUSD.toFixed(2)}

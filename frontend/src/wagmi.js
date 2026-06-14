@@ -1,7 +1,7 @@
 import { parseAbi } from "viem";
 
 export const VAULT_ADDRESS = import.meta.env.VITE_VAULT_ADDRESS;
-export const AAVE_POOL     = "0x07eA79F68B2B3df564D0A34F8e19D9B1e339814";
+export const AAVE_POOL     = "0x8bAB6d1b75f19e9eD9fCe8b9BD338844fF79aE27"; // Base Sepolia
 
 export const VAULT_ABI = parseAbi([
   "function getPolicy() external view returns (address, bool, uint256, uint256, uint256, uint256, address[])",
