@@ -1,11 +1,14 @@
 import { useEffect } from "react";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useEnsName } from "wagmi";
+import { useAccount, useConnect, useDisconnect, useWriteContract, useWaitForTransactionReceipt, useEnsName } from "wagmi";
 import { mainnet, sepolia } from "wagmi/chains";
-import { DynamicWidget } from "@dynamic-labs/sdk-react-core";
+import { injected } from "wagmi/connectors";
 import { VAULT_ADDRESS, VAULT_ABI, VAULT_CHAIN_ID } from "../wagmi";
 
 export default function Header({ agentRevoked, setOptimisticRevoked, refetchPolicy }) {
   const { address, isConnected } = useAccount();
+  const { connect }    = useConnect();
+  const { disconnect } = useDisconnect();
+
   const { data: ensNameMainnet } = useEnsName({ address, chainId: mainnet.id });
   const { data: ensNameSepolia } = useEnsName({ address, chainId: sepolia.id });
   const ensName = ensNameMainnet ?? ensNameSepolia ?? import.meta.env.VITE_MOCK_ENS ?? null;
@@ -44,7 +47,6 @@ export default function Header({ agentRevoked, setOptimisticRevoked, refetchPoli
   return (
     <header className="bg-white border-b border-gray-200 px-6 py-4">
       <div className="max-w-5xl mx-auto flex items-center justify-between">
-        {/* Logo */}
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
             <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -54,17 +56,21 @@ export default function Header({ agentRevoked, setOptimisticRevoked, refetchPoli
           <span className="text-xl font-bold text-gray-900">One-Agent</span>
         </div>
 
-        {/* Right side */}
         <div className="flex items-center gap-3">
-          {isConnected && (
+          {isConnected ? (
             <>
-              {/* Agent status */}
               <div className="flex items-center gap-1.5">
                 <div className={`w-2 h-2 rounded-full ${agentRevoked ? "bg-red-500" : "bg-green-500"}`} />
                 <span className="text-sm text-gray-600">{agentRevoked ? "Agent stopped" : "Agent active"}</span>
               </div>
 
-              {/* Kill Switch */}
+              <button
+                onClick={() => disconnect()}
+                className="text-sm bg-gray-100 hover:bg-gray-200 rounded-lg px-3 py-1.5 text-gray-700 font-mono transition"
+              >
+                {ensName ?? `${address?.slice(0, 6)}…${address?.slice(-4)}`}
+              </button>
+
               <button
                 onClick={toggleKillSwitch}
                 disabled={isPending}
@@ -80,18 +86,14 @@ export default function Header({ agentRevoked, setOptimisticRevoked, refetchPoli
                 {isPending ? "Confirming…" : agentRevoked ? "Reinstate" : "Kill switch"}
               </button>
             </>
+          ) : (
+            <button
+              onClick={() => connect({ connector: injected() })}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-500 transition"
+            >
+              Connect Wallet
+            </button>
           )}
-
-          {/* Dynamic wallet button — shows ENS name when connected */}
-          <DynamicWidget
-            innerButtonComponent={
-              isConnected
-                ? <span className="font-mono text-sm">
-                    {ensName ?? `${address?.slice(0, 6)}…${address?.slice(-4)}`}
-                  </span>
-                : undefined
-            }
-          />
         </div>
       </div>
     </header>

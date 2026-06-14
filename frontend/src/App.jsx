@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useAccount, useReadContract } from "wagmi";
-import { DynamicWidget } from "@dynamic-labs/sdk-react-core";
+import { useAccount, useConnect, useReadContract } from "wagmi";
+import { injected } from "wagmi/connectors";
 import { VAULT_ADDRESS, VAULT_ABI, VAULT_CHAIN_ID } from "./wagmi";
 import Header       from "./components/Header";
 import StatsRow     from "./components/StatsRow";
@@ -14,6 +14,7 @@ export default function App() {
   const [log,      setLog]      = useState([]);
 
   const { isConnected } = useAccount();
+  const { connect }     = useConnect();
 
   const { data: policy, refetch: refetchPolicy } = useReadContract({
     address: VAULT_ADDRESS, abi: VAULT_ABI,
@@ -37,7 +38,12 @@ export default function App() {
             <span className="text-2xl font-bold text-gray-900">One-Agent</span>
           </div>
           <p className="text-gray-500 text-sm">On-chain policy firewall for AI DeFi agents</p>
-          <DynamicWidget />
+          <button
+            onClick={() => connect({ connector: injected() })}
+            className="px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-500 transition"
+          >
+            Connect Wallet
+          </button>
         </div>
       </div>
     );
