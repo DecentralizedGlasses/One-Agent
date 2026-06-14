@@ -8,7 +8,7 @@ export default function Header({ agentRevoked, setOptimisticRevoked, refetchPoli
   const { address, isConnected } = useAccount();
   const { data: ensNameMainnet } = useEnsName({ address, chainId: mainnet.id });
   const { data: ensNameSepolia } = useEnsName({ address, chainId: sepolia.id });
-  const ensName = ensNameMainnet ?? ensNameSepolia;
+  const ensName = ensNameMainnet ?? ensNameSepolia ?? import.meta.env.VITE_MOCK_ENS ?? null;
   const { connect }    = useConnect();
   const { disconnect } = useDisconnect();
 
