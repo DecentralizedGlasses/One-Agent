@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { useAccount, useConnect, useDisconnect } from "wagmi";
+import { useAccount, useConnect, useDisconnect, useReadContract } from "wagmi";
 import { injected } from "wagmi/connectors";
+import { VAULT_ADDRESS, VAULT_ABI, VAULT_CHAIN_ID } from "./wagmi";
 import PositionCard from "./components/PositionCard";
 import PolicyPanel  from "./components/PolicyPanel";
 import ActionFeed   from "./components/ActionFeed";
@@ -9,9 +10,22 @@ import WalletStatus from "./components/WalletStatus";
 
 export default function App() {
   const [theme, setTheme] = useState("light");
+  const [optimisticRevoked, setOptimisticRevoked] = useState(null);
+
   const { address, isConnected } = useAccount();
   const { connect }    = useConnect();
   const { disconnect } = useDisconnect();
+
+  const { data: policy, refetch: refetchPolicy } = useReadContract({
+    address: VAULT_ADDRESS,
+    abi: VAULT_ABI,
+    functionName: "getPolicy",
+    chainId: VAULT_CHAIN_ID,
+    query: { enabled: isConnected },
+  });
+
+  const onChainRevoked = policy?.[1] ?? false;
+  const agentRevoked   = optimisticRevoked !== null ? optimisticRevoked : onChainRevoked;
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("theme");
@@ -62,6 +76,15 @@ export default function App() {
           <p className="text-sm text-slate-500 dark:text-slate-400">On-chain policy firewall for AI DeFi agents</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <span className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
+            agentRevoked
+              ? "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300"
+              : "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${agentRevoked ? "bg-red-500" : "bg-green-500"}`} />
+            {agentRevoked ? "Agent Revoked" : "Agent Active"}
+          </span>
+
           <button
             onClick={toggleTheme}
             className="px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm text-gray-700 hover:bg-gray-100 transition dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
@@ -84,11 +107,15 @@ export default function App() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="md:col-span-2"><PositionCard /></div>
-        <KillSwitch />
+        <KillSwitch
+          optimisticRevoked={optimisticRevoked}
+          setOptimisticRevoked={setOptimisticRevoked}
+          refetchPolicy={refetchPolicy}
+        />
       </div>
 
       <PolicyPanel />
-      <ActionFeed />
+      <ActionFeed agentRevoked={agentRevoked} />
     </div>
   );
 }

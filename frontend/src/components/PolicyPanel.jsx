@@ -1,15 +1,29 @@
 import { useState } from "react";
-import { useReadContract, useWriteContract } from "wagmi";
-import { VAULT_ADDRESS, VAULT_ABI } from "../wagmi";
+import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { VAULT_ADDRESS, VAULT_ABI, VAULT_CHAIN_ID } from "../wagmi";
 
 export default function PolicyPanel() {
   const { data: policy, refetch } = useReadContract({
     address: VAULT_ADDRESS,
     abi: VAULT_ABI,
     functionName: "getPolicy",
+    chainId: VAULT_CHAIN_ID,
   });
 
-  const { writeContract, isPending } = useWriteContract();
+  const { writeContract, isPending, data: txHash } = useWriteContract();
+
+  const { isLoading: isConfirming } = useWaitForTransactionReceipt({
+    hash: txHash,
+    chainId: VAULT_CHAIN_ID,
+    onReplaced: () => refetch(),
+    query: {
+      enabled: !!txHash,
+      onSuccess: () => {
+        refetch();
+        setMaxTx(""); setCooldown(""); setHfFloor(""); setPriceFloor("");
+      },
+    },
+  });
 
   const [maxTx,      setMaxTx]      = useState("");
   const [cooldown,   setCooldown]   = useState("");
@@ -26,6 +40,7 @@ export default function PolicyPanel() {
     writeContract({
       address: VAULT_ADDRESS,
       abi: VAULT_ABI,
+      chainId: VAULT_CHAIN_ID,
       functionName: "setPolicy",
       args: [
         BigInt(Math.floor(Number(maxTx)      * 1e6)),
@@ -33,13 +48,10 @@ export default function PolicyPanel() {
         BigInt(Math.floor(Number(hfFloor)    * 1e18)),
         BigInt(Math.floor(Number(priceFloor) * 1e8)),
       ],
-    }, {
-      onSuccess: () => {
-        refetch();
-        setMaxTx(""); setCooldown(""); setHfFloor(""); setPriceFloor("");
-      }
     });
   }
+
+  const busy = isPending || isConfirming;
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-xl p-5 space-y-4 border border-gray-200 dark:border-slate-700 shadow-sm">
@@ -51,38 +63,10 @@ export default function PolicyPanel() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-        <Field
-          label="Max Tx Amount (USDC)"
-          current={currentMax}
-          value={maxTx}
-          onChange={setMaxTx}
-          placeholder={currentMax}
-          step="1"
-        />
-        <Field
-          label="Cooldown (minutes)"
-          current={currentCd}
-          value={cooldown}
-          onChange={setCooldown}
-          placeholder={currentCd}
-          integersOnly
-        />
-        <Field
-          label="Health Factor Floor"
-          current={currentHf}
-          value={hfFloor}
-          onChange={setHfFloor}
-          placeholder={currentHf}
-          step="0.01"
-        />
-        <Field
-          label="ETH Price Floor (USD)"
-          current={`$${currentPrice}`}
-          value={priceFloor}
-          onChange={setPriceFloor}
-          placeholder={currentPrice}
-          step="1"
-        />
+        <Field label="Max Tx Amount (USDC)" current={currentMax} value={maxTx} onChange={setMaxTx} placeholder={currentMax} step="1" />
+        <Field label="Cooldown (minutes)"   current={currentCd}  value={cooldown} onChange={setCooldown} placeholder={currentCd} integersOnly />
+        <Field label="Health Factor Floor"  current={currentHf}  value={hfFloor} onChange={setHfFloor} placeholder={currentHf} step="0.01" />
+        <Field label="ETH Price Floor (USD)" current={`$${currentPrice}`} value={priceFloor} onChange={setPriceFloor} placeholder={currentPrice} step="1" />
       </div>
 
       <div className="space-y-2">
@@ -98,10 +82,10 @@ export default function PolicyPanel() {
 
       <button
         onClick={savePolicy}
-        disabled={isPending || !maxTx || !cooldown || !hfFloor || !priceFloor}
+        disabled={busy || !maxTx || !cooldown || !hfFloor || !priceFloor}
         className="px-4 py-2 bg-brand rounded-lg text-sm font-semibold hover:bg-indigo-500 disabled:opacity-40 transition text-white"
       >
-        {isPending ? "Saving…" : "Save Policy"}
+        {isPending ? "Confirm in MetaMask…" : isConfirming ? "Saving on-chain…" : "Save Policy"}
       </button>
     </div>
   );

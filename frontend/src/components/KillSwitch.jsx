@@ -1,165 +1,123 @@
-import { useEffect, useMemo, useState } from "react";
-import { useAccount, useReadContract, useWriteContract } from "wagmi";
-import { VAULT_ADDRESS, VAULT_ABI } from "../wagmi";
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { VAULT_ADDRESS, VAULT_ABI, VAULT_CHAIN_ID } from "../wagmi";
 
-const AGENT_URL = import.meta.env.VITE_AGENT_URL || "http://localhost:3001";
-
-export default function KillSwitch() {
+export default function KillSwitch({ optimisticRevoked, setOptimisticRevoked, refetchPolicy }) {
   const { isConnected } = useAccount();
-  const [agentLog, setAgentLog] = useState([]);
-  const [agentOnline, setAgentOnline] = useState(null);
 
-  const { data: policy, isLoading, isError, refetch } = useReadContract({
+  const { data: policy, isLoading } = useReadContract({
     address: VAULT_ADDRESS,
     abi: VAULT_ABI,
     functionName: "getPolicy",
+    chainId: VAULT_CHAIN_ID,
   });
 
-  const { writeContract, isPending } = useWriteContract();
+  const { writeContract, isPending, data: txHash } = useWriteContract();
 
-  const isRevoked = policy?.[1] ?? false;
-  const latestAction = agentLog[0] ?? null;
-  const status = useMemo(() => {
-    if (!isConnected) {
-      return {
-        label: "Wallet disconnected",
-        detail: "Connect a wallet to manage agent protection.",
-        color: "bg-gray-400",
-        pulse: false,
-      };
-    }
+  useWaitForTransactionReceipt({
+    hash: txHash,
+    chainId: VAULT_CHAIN_ID,
+    query: {
+      enabled: !!txHash,
+      onSuccess: () => {
+        refetchPolicy();
+        setOptimisticRevoked(null);
+      },
+    },
+  });
 
-    if (isLoading) {
-      return {
-        label: "Checking vault",
-        detail: "Reading the on-chain agent policy.",
-        color: "bg-yellow-400",
-        pulse: true,
-      };
-    }
+  const onChainRevoked = policy?.[1] ?? false;
+  const isRevoked      = optimisticRevoked !== null ? optimisticRevoked : onChainRevoked;
+  const agent          = policy?.[0];
+  const allowedTargets = policy?.[6] ?? [];
+  const busy           = isPending;
 
-    if (isError) {
-      return {
-        label: "Vault unavailable",
-        detail: "Unable to read the on-chain policy status.",
-        color: "bg-yellow-500",
-        pulse: false,
-      };
-    }
-
-    if (isRevoked) {
-      return {
-        label: "Agent revoked",
-        detail: "The on-chain kill switch is blocking agent execution.",
-        color: "bg-red-500",
-        pulse: false,
-      };
-    }
-
-    if (agentOnline === false) {
-      return {
-        label: "Agent backend offline",
-        detail: "The wallet is connected, but the AI agent service is unreachable.",
-        color: "bg-yellow-500",
-        pulse: false,
-      };
-    }
-
-    if (!latestAction) {
-      return {
-        label: "Agent idle",
-        detail: "Wallet and vault are ready. No agent run has been recorded yet.",
-        color: "bg-blue-500",
-        pulse: false,
-      };
-    }
-
-    if (latestAction.status === "blocked") {
-      return {
-        label: "Last action blocked",
-        detail: latestAction.reason || "PolicyVault blocked the most recent agent action.",
-        color: "bg-red-500",
-        pulse: false,
-      };
-    }
-
-    if (latestAction.status === "error") {
-      return {
-        label: "Agent error",
-        detail: latestAction.reason || "The agent hit an error during its last run.",
-        color: "bg-yellow-500",
-        pulse: false,
-      };
-    }
-
-    if (latestAction.decision?.action === "none") {
-      return {
-        label: "Agent monitoring",
-        detail: latestAction.decision.reason || "The latest run chose not to submit a transaction.",
-        color: "bg-green-500",
-        pulse: true,
-      };
-    }
-
-    return {
-      label: "Agent executed",
-      detail: latestAction.decision?.reason || "The latest agent action passed policy checks.",
-      color: "bg-green-500",
-      pulse: true,
-    };
-  }, [agentOnline, isConnected, isError, isLoading, isRevoked, latestAction]);
-
-  async function fetchAgentLog() {
-    const res = await fetch(`${AGENT_URL}/log`).catch(() => null);
-    if (!res?.ok) {
-      setAgentOnline(false);
-      return;
-    }
-
-    setAgentOnline(true);
-    setAgentLog(await res.json());
-  }
-
-  useEffect(() => {
-    fetchAgentLog();
-    const id = setInterval(fetchAgentLog, 5000);
-    return () => clearInterval(id);
-  }, []);
-
-  function toggle() {
+  function revoke() {
+    setOptimisticRevoked(true);
     writeContract({
       address: VAULT_ADDRESS,
       abi: VAULT_ABI,
-      functionName: isRevoked ? "reinstateAgent" : "emergencyRevoke",
+      chainId: VAULT_CHAIN_ID,
+      functionName: "emergencyRevoke",
       args: [],
-    }, { onSuccess: () => refetch() });
+    }, {
+      onError: () => setOptimisticRevoked(null),
+    });
+  }
+
+  function reinstate() {
+    setOptimisticRevoked(false);
+    writeContract({
+      address: VAULT_ADDRESS,
+      abi: VAULT_ABI,
+      chainId: VAULT_CHAIN_ID,
+      functionName: "reinstateAgent",
+      args: [],
+    }, {
+      onError: () => setOptimisticRevoked(null),
+    });
+  }
+
+  if (isRevoked) {
+    return (
+      <div className="bg-red-50 dark:bg-red-950 rounded-xl p-5 flex flex-col gap-4 border border-red-300 dark:border-red-700 shadow-sm">
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-red-500" />
+          <p className="text-sm font-bold text-red-700 dark:text-red-300 uppercase tracking-wider">Agent Revoked</p>
+        </div>
+
+        <p className="text-xs text-red-600 dark:text-red-400">
+          The AI agent has lost access to the vault and all whitelisted contracts. No transactions can go through.
+        </p>
+
+        {agent && (
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-red-700 dark:text-red-300">Blocked agent</p>
+            <p className="text-xs font-mono bg-red-100 dark:bg-red-900 rounded px-2 py-1 text-red-800 dark:text-red-200">
+              {agent.slice(0, 6)}…{agent.slice(-4)}
+            </p>
+          </div>
+        )}
+
+        {allowedTargets.length > 0 && (
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-red-700 dark:text-red-300">Contracts now blocked</p>
+            <div className="flex flex-wrap gap-1">
+              {allowedTargets.map(addr => (
+                <span key={addr} className="text-xs font-mono bg-red-100 dark:bg-red-900 rounded px-2 py-1 text-red-800 dark:text-red-200">
+                  {addr.slice(0, 6)}…{addr.slice(-4)}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <button
+          onClick={reinstate}
+          disabled={busy || !isConnected}
+          className="w-full py-3 rounded-lg font-bold text-sm bg-green-600 hover:bg-green-500 text-white transition disabled:opacity-40"
+        >
+          {isPending ? "Confirm in MetaMask…" : "Reinstate Agent"}
+        </button>
+      </div>
+    );
   }
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-xl p-5 flex flex-col items-center justify-center gap-4 border border-gray-200 dark:border-slate-700 shadow-sm">
       <p className="text-sm text-gray-500 dark:text-slate-400 font-semibold uppercase tracking-wider">Kill Switch</p>
 
-      <div className={`w-4 h-4 rounded-full ${status.color} ${status.pulse ? "animate-pulse" : ""}`} />
+      <div className={`w-4 h-4 rounded-full ${isLoading ? "bg-yellow-400 animate-pulse" : "bg-green-500 animate-pulse"}`} />
 
-      <div className="text-center space-y-1">
-        <p className="text-xs font-semibold uppercase text-gray-500 dark:text-slate-300">{status.label}</p>
-        <p className="text-xs text-gray-400 dark:text-slate-500">{status.detail}</p>
-      </div>
+      <p className="text-xs font-semibold uppercase text-gray-500 dark:text-slate-300">
+        {isLoading ? "Checking vault…" : "Agent active"}
+      </p>
 
       <button
-        onClick={toggle}
-        disabled={isPending || !isConnected || isLoading || isError}
-        className={`w-full py-3 rounded-lg font-bold text-sm transition disabled:opacity-40 ${
-          isRevoked
-            ? "bg-green-600 hover:bg-green-500 text-white"
-            : "bg-red-600 hover:bg-red-500 text-white"
-        }`}
+        onClick={revoke}
+        disabled={busy || !isConnected}
+        className="w-full py-3 rounded-lg font-bold text-sm bg-red-600 hover:bg-red-500 text-white transition disabled:opacity-40"
       >
-        {isPending
-          ? "Confirming…"
-          : isRevoked
-          ? "Reinstate Agent"
-          : "Emergency Revoke"}
+        {isPending ? "Confirm in MetaMask…" : "Emergency Revoke"}
       </button>
     </div>
   );

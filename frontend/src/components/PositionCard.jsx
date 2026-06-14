@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useReadContract } from "wagmi";
-import { VAULT_ADDRESS, VAULT_ABI } from "../wagmi";
+import { VAULT_ADDRESS, VAULT_ABI, VAULT_CHAIN_ID } from "../wagmi";
 
 const AGENT_URL = import.meta.env.VITE_AGENT_URL || "http://localhost:3001";
 
@@ -12,12 +12,14 @@ export default function PositionCard() {
     address: VAULT_ADDRESS,
     abi: VAULT_ABI,
     functionName: "getHealthFactor",
+    chainId: VAULT_CHAIN_ID,
   });
 
   const { data: policy } = useReadContract({
     address: VAULT_ADDRESS,
     abi: VAULT_ABI,
     functionName: "getPolicy",
+    chainId: VAULT_CHAIN_ID,
   });
 
   useEffect(() => {
