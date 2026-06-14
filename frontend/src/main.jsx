@@ -3,8 +3,6 @@ import ReactDOM from "react-dom/client";
 import { WagmiProvider, createConfig, http } from "wagmi";
 import { sepolia, baseSepolia, localhost } from "wagmi/chains";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { DynamicContextProvider } from "@dynamic-labs/sdk-react-core";
-import { EthereumWalletConnectors } from "@dynamic-labs/ethereum";
 import App from "./App";
 import "./index.css";
 
@@ -18,28 +16,13 @@ const wagmiConfig = createConfig({
 });
 
 const queryClient = new QueryClient();
-const dynamicEnvironmentId = import.meta.env.VITE_DYNAMIC_ENVIRONMENT_ID;
-
-if (!dynamicEnvironmentId) {
-  console.warn(
-    "VITE_DYNAMIC_ENVIRONMENT_ID is not set. Dynamic wallet login will not work until this environment variable is configured."
-  );
-}
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <DynamicContextProvider
-      settings={{
-        environmentId: dynamicEnvironmentId ?? "",
-        walletConnectors: [EthereumWalletConnectors],
-        appName: "One-Agent",
-      }}
-    >
-      <WagmiProvider config={wagmiConfig}>
-        <QueryClientProvider client={queryClient}>
-          <App />
-        </QueryClientProvider>
-      </WagmiProvider>
-    </DynamicContextProvider>
+    <WagmiProvider config={wagmiConfig}>
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    </WagmiProvider>
   </React.StrictMode>
 );

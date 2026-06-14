@@ -11,9 +11,16 @@ export default function PolicyPanel() {
 
   const { writeContract, isPending } = useWriteContract();
 
-  const [maxTx,    setMaxTx]    = useState("");
-  const [cooldown, setCooldown] = useState("");
-  const [hfFloor,  setHfFloor]  = useState("");
+  const [maxTx,      setMaxTx]      = useState("");
+  const [cooldown,   setCooldown]   = useState("");
+  const [hfFloor,    setHfFloor]    = useState("");
+  const [priceFloor, setPriceFloor] = useState("");
+
+  const currentMax   = policy ? (Number(policy[2]) / 1e6).toFixed(0)  : "500";
+  const currentCd    = policy ? (Number(policy[3]) / 60).toFixed(0)   : "30";
+  const currentHf    = policy ? (Number(policy[4]) / 1e18).toFixed(2) : "1.50";
+  const currentPrice = policy ? (Number(policy[5]) / 1e8).toFixed(0)  : "1500";
+  const isRevoked    = policy?.[1] ?? false;
 
   function savePolicy() {
     writeContract({
@@ -21,17 +28,18 @@ export default function PolicyPanel() {
       abi: VAULT_ABI,
       functionName: "setPolicy",
       args: [
-        BigInt(Math.floor(Number(maxTx)    * 1e6)),
-        BigInt(Number(cooldown) * 60),
-        BigInt(Math.floor(Number(hfFloor)  * 1e18)),
+        BigInt(Math.floor(Number(maxTx)      * 1e6)),
+        BigInt(Number(cooldown)              * 60),
+        BigInt(Math.floor(Number(hfFloor)    * 1e18)),
+        BigInt(Math.floor(Number(priceFloor) * 1e8)),
       ],
-    }, { onSuccess: () => refetch() });
+    }, {
+      onSuccess: () => {
+        refetch();
+        setMaxTx(""); setCooldown(""); setHfFloor(""); setPriceFloor("");
+      }
+    });
   }
-
-  const currentMax    = policy ? (Number(policy[2]) / 1e6).toFixed(0)  : "500";
-  const currentCd     = policy ? (Number(policy[3]) / 60).toFixed(0)   : "30";
-  const currentHf     = policy ? (Number(policy[4]) / 1e18).toFixed(2) : "1.50";
-  const isRevoked     = policy?.[1] ?? false;
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-xl p-5 space-y-4 border border-gray-200 dark:border-slate-700 shadow-sm">
@@ -42,14 +50,14 @@ export default function PolicyPanel() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         <Field
           label="Max Tx Amount (USDC)"
           current={currentMax}
           value={maxTx}
           onChange={setMaxTx}
           placeholder={currentMax}
-          step="0.01"
+          step="1"
         />
         <Field
           label="Cooldown (minutes)"
@@ -67,6 +75,14 @@ export default function PolicyPanel() {
           placeholder={currentHf}
           step="0.01"
         />
+        <Field
+          label="ETH Price Floor (USD)"
+          current={`$${currentPrice}`}
+          value={priceFloor}
+          onChange={setPriceFloor}
+          placeholder={currentPrice}
+          step="1"
+        />
       </div>
 
       <div className="space-y-2">
@@ -82,7 +98,7 @@ export default function PolicyPanel() {
 
       <button
         onClick={savePolicy}
-        disabled={isPending || (!maxTx && !cooldown && !hfFloor)}
+        disabled={isPending || !maxTx || !cooldown || !hfFloor || !priceFloor}
         className="px-4 py-2 bg-brand rounded-lg text-sm font-semibold hover:bg-indigo-500 disabled:opacity-40 transition text-white"
       >
         {isPending ? "Saving…" : "Save Policy"}
@@ -92,34 +108,20 @@ export default function PolicyPanel() {
 }
 
 function Field({ label, current, value, onChange, placeholder, integersOnly = false, step = "1" }) {
-  const numericPattern = integersOnly ? /^\d*$/ : /^\d*(\.\d*)?$/;
-
-  function handleChange(nextValue) {
-    if (numericPattern.test(nextValue)) {
-      onChange(nextValue);
-    }
-  }
-
-  function handleKeyDown(e) {
-    if (["e", "E", "+", "-"].includes(e.key) || (integersOnly && e.key === ".")) {
-      e.preventDefault();
-    }
-  }
-
   return (
     <div className="space-y-1">
-      <label className="text-xs text-gray-400 dark:text-slate-500">
-        <span className="font-bold text-brand dark:text-indigo-300">{label}</span>
-        <span>{` - current: ${current}`}</span>
-      </label>
+      <label className="text-xs font-medium text-gray-500 dark:text-slate-400">{label}</label>
+      <p className="text-xs text-gray-400 dark:text-slate-500">Current: {current}</p>
       <input
         type="number"
         inputMode={integersOnly ? "numeric" : "decimal"}
         min="0"
         step={step}
         value={value}
-        onChange={(e) => handleChange(e.target.value)}
-        onKeyDown={handleKeyDown}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (["e","E","+","-"].includes(e.key) || (integersOnly && e.key === ".")) e.preventDefault();
+        }}
         placeholder={placeholder}
         className="w-full bg-gray-50 dark:bg-slate-900 rounded px-3 py-2 text-sm text-gray-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500 border border-gray-300 dark:border-slate-700 focus:outline-none focus:border-brand"
       />
