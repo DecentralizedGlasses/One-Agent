@@ -2,13 +2,19 @@ import { useEffect, useState } from "react";
 
 const AGENT_URL = import.meta.env.VITE_AGENT_URL || "http://localhost:3001";
 
-export default function ActionFeed({ agentRevoked = false }) {
+export default function ActionFeed({ agentRevoked = false, onLog }) {
   const [log,     setLog]     = useState([]);
   const [loading, setLoading] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
+  const [demoResult, setDemoResult]   = useState(null);
 
   async function fetchLog() {
     const res = await fetch(`${AGENT_URL}/log`).catch(() => null);
-    if (res?.ok) setLog(await res.json());
+    if (res?.ok) {
+      const data = await res.json();
+      setLog(data);
+      onLog?.(data);
+    }
   }
 
   async function triggerRun() {
@@ -18,6 +24,16 @@ export default function ActionFeed({ agentRevoked = false }) {
     setLoading(false);
   }
 
+  async function triggerDemo() {
+    setDemoResult(null);
+    setDemoLoading(true);
+    const res  = await fetch(`${AGENT_URL}/run-demo`, { method: "POST" }).catch(() => null);
+    const data = res?.ok ? await res.json() : null;
+    await fetchLog();
+    setDemoResult(data);
+    setDemoLoading(false);
+  }
+
   useEffect(() => {
     fetchLog();
     const id = setInterval(fetchLog, 5000);
@@ -25,66 +41,124 @@ export default function ActionFeed({ agentRevoked = false }) {
   }, []);
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-xl p-5 space-y-4 border border-gray-200 dark:border-slate-700 shadow-sm">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Agent Action Log</h2>
+    <div className="bg-white rounded-2xl border border-gray-200 p-5 flex flex-col h-full">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          {agentRevoked && (
-            <span className="text-xs text-red-600 dark:text-red-400 font-medium">Agent revoked — actions blocked</span>
-          )}
+          <span className="text-lg">⚡</span>
+          <h2 className="text-base font-semibold text-gray-900">Agent action feed</h2>
+        </div>
+        <div className="flex gap-2">
           <button
             onClick={triggerRun}
             disabled={loading || agentRevoked}
-            className="px-3 py-1 text-xs bg-brand text-white rounded hover:bg-indigo-500 disabled:opacity-40 transition"
+            className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 disabled:opacity-40 transition"
           >
-            {loading ? "Running…" : "Run Agent"}
+            {loading ? "Running…" : "Run agent"}
+          </button>
+          <button
+            onClick={triggerDemo}
+            disabled={demoLoading || agentRevoked}
+            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-orange-100 hover:bg-orange-200 text-orange-700 disabled:opacity-40 transition"
+          >
+            {demoLoading ? "Testing…" : "Test firewall"}
           </button>
         </div>
       </div>
 
-      <div className="space-y-2 max-h-80 overflow-y-auto">
+      {agentRevoked && (
+        <div className="mb-3 px-3 py-2 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 font-medium">
+          Agent is revoked — all actions blocked
+        </div>
+      )}
+
+      {/* Demo result banner */}
+      {demoResult && (
+        <div className={`mb-3 px-3 py-2 rounded-xl text-xs font-medium border ${
+          demoResult.status === "blocked"
+            ? "bg-red-50 border-red-200 text-red-800"
+            : "bg-green-50 border-green-200 text-green-800"
+        }`}>
+          {demoResult.status === "blocked"
+            ? `🔒 Blocked [${demoResult.rule}]: ${demoResult.reason}`
+            : `✓ Allowed: ${demoResult.decision?.reason}`}
+        </div>
+      )}
+
+      {/* Feed */}
+      <div className="flex-1 overflow-y-auto space-y-0 divide-y divide-gray-100 max-h-[480px]">
         {log.length === 0 ? (
-          <p className="text-sm text-gray-400 dark:text-slate-500">No actions yet — click "Run Agent" to start.</p>
+          <p className="text-sm text-gray-400 py-4">No actions yet — click "Run agent" to start.</p>
         ) : (
-          log.map((entry, i) => <LogEntry key={i} entry={entry} />)
+          log.map((entry, i) => <FeedEntry key={i} entry={entry} />)
         )}
       </div>
     </div>
   );
 }
 
-function LogEntry({ entry }) {
-  const isAllowed = entry.status === "allowed";
-  const isBlocked = entry.status === "blocked";
+function FeedEntry({ entry }) {
+  const { dot, badge, badgeStyle, text, detail } = formatEntry(entry);
 
   return (
-    <div className={`flex items-start gap-3 p-3 rounded-lg text-sm ${
-      isAllowed ? "bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-700"
-      : isBlocked ? "bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-700"
-      : "bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700"
-    }`}>
-      <span>{isAllowed ? "✓" : isBlocked ? "✗" : "·"}</span>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-0.5">
-          <span className={`text-xs font-bold uppercase ${
-            isAllowed ? "text-green-700 dark:text-green-300"
-            : isBlocked ? "text-red-700 dark:text-red-300"
-            : "text-gray-500 dark:text-slate-400"
-          }`}>{entry.status}</span>
-          <span className="text-xs text-gray-400 dark:text-slate-500">{new Date(entry.ts).toLocaleTimeString()}</span>
+    <div className="py-3">
+      <div className="flex items-start gap-2.5">
+        <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${dot}`} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm text-gray-900">{text}</span>
+            {badge && (
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badgeStyle}`}>{badge}</span>
+            )}
+          </div>
+          {detail && <p className="text-xs text-gray-500 mt-0.5">{detail}</p>}
+          <p className="text-xs text-gray-400 mt-0.5">{relativeTime(entry.ts)}</p>
         </div>
-        <p className="text-xs text-gray-700 dark:text-slate-200 truncate">
-          {entry.decision?.action
-            ? `${entry.decision.action}${entry.decision.amount ? ` $${entry.decision.amount} USDC` : ""} — ${entry.decision.reason ?? entry.reason}`
-            : entry.reason ?? "—"}
-        </p>
-        {entry.hash && (
-          <a href={`https://sepolia.etherscan.io/tx/${entry.hash}`} target="_blank" rel="noreferrer"
-            className="text-xs text-brand hover:underline">
-            {entry.hash.slice(0, 10)}… ↗
-          </a>
-        )}
       </div>
     </div>
   );
+}
+
+function formatEntry(entry) {
+  if (entry.status === "alert") {
+    const hf = entry.decision?.healthFactor;
+    return {
+      dot: "bg-orange-500",
+      badge: "⚠ alert",
+      badgeStyle: "bg-orange-100 text-orange-700",
+      text: `Health factor ${hf ? hf.toFixed(2) : "critical"} — owner action needed`,
+      detail: entry.reason,
+    };
+  }
+  if (entry.status === "blocked") {
+    const act  = entry.decision?.action;
+    const amt  = entry.decision?.amount;
+    const text = act && amt
+      ? `Tried to ${act} ${amt} USDC — ${entry.rule ?? "blocked"}`
+      : entry.reason ?? "Blocked by PolicyVault";
+    return { dot: "bg-red-500", badge: "blocked", badgeStyle: "bg-red-100 text-red-700", text };
+  }
+  if (entry.status === "allowed") {
+    const act  = entry.decision?.action;
+    const amt  = entry.decision?.amount;
+    const text = act && amt ? `${cap(act)} ${amt} USDC` : "Action executed";
+    return { dot: "bg-green-500", badge: "executed", badgeStyle: "bg-green-100 text-green-700", text };
+  }
+  if (entry.status === "idle") {
+    return { dot: "bg-blue-500", badge: "ok", badgeStyle: "bg-blue-100 text-blue-700", text: "Agent scanned position — no action needed" };
+  }
+  if (entry.status === "revoked") {
+    return { dot: "bg-red-500", badge: "killed", badgeStyle: "bg-red-100 text-red-700", text: "Kill switch triggered — session revoked" };
+  }
+  return { dot: "bg-gray-400", badge: null, badgeStyle: "", text: entry.reason ?? "Agent action" };
+}
+
+function cap(str) { return str ? str.charAt(0).toUpperCase() + str.slice(1) : ""; }
+
+function relativeTime(ts) {
+  const diff = Date.now() - ts;
+  if (diff < 60000)  return "just now";
+  if (diff < 3600000) return `${Math.floor(diff / 60000)} min ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)} hr ago`;
+  return new Date(ts).toLocaleDateString();
 }

@@ -1,96 +1,100 @@
 import { useEffect, useState } from "react";
-import { useReadContract } from "wagmi";
-import { VAULT_ADDRESS, VAULT_ABI, VAULT_CHAIN_ID } from "../wagmi";
 
 const AGENT_URL = import.meta.env.VITE_AGENT_URL || "http://localhost:3001";
 
-export default function PositionCard() {
-  const [livePosition, setLivePosition] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  const { data: hf } = useReadContract({
-    address: VAULT_ADDRESS,
-    abi: VAULT_ABI,
-    functionName: "getHealthFactor",
-    chainId: VAULT_CHAIN_ID,
-  });
-
-  const { data: policy } = useReadContract({
-    address: VAULT_ADDRESS,
-    abi: VAULT_ABI,
-    functionName: "getPolicy",
-    chainId: VAULT_CHAIN_ID,
-  });
+export default function PositionCard({ onPosition }) {
+  const [position, setPosition] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
-    async function fetchPosition() {
+    async function fetch_() {
       try {
-        const res = await fetch(`${AGENT_URL}/position`);
+        const res  = await fetch(`${AGENT_URL}/position`);
         const data = await res.json();
-        if (!cancelled) setLivePosition(data);
-      } catch {
-        // agent not running — fall back to on-chain health factor only
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+        if (!cancelled) { setPosition(data); onPosition?.(data); }
+      } catch { /* agent not running */ }
     }
-    fetchPosition();
-    const id = setInterval(fetchPosition, 15000);
+    fetch_();
+    const id = setInterval(fetch_, 15000);
     return () => { cancelled = true; clearInterval(id); };
   }, []);
 
-  const healthFactor = livePosition?.healthFactor
-    ? livePosition.healthFactor.toFixed(4)
-    : hf
-      ? (Number(hf) / 1e18).toFixed(4)
-      : "—";
-
-  const hfNum = livePosition?.healthFactor ?? (hf ? Number(hf) / 1e18 : null);
-  const hfColor =
-    hfNum === null ? "text-gray-400 dark:text-slate-400"
-    : hfNum >= 2   ? "text-green-500"
-    : hfNum >= 1.5 ? "text-yellow-500"
-    : "text-red-500";
-
-  const fmt = (n) => n !== undefined && n !== null ? `$${n.toFixed(2)}` : "—";
+  const collateral = position?.totalCollateralUSD ?? null;
+  const debt       = position?.totalDebtUSD ?? null;
+  const hf         = position?.healthFactor ?? null;
+  const hfPct      = hf !== null ? Math.min((hf / 3) * 100, 100) : 0;
+  const hfColor    = hf === null ? "text-gray-400" : hf >= 2 ? "text-green-700" : hf >= 1.5 ? "text-yellow-600" : "text-red-600";
+  const barColor   = hf === null ? "bg-gray-300" : hf >= 2 ? "bg-green-700" : hf >= 1.5 ? "bg-yellow-500" : "bg-red-500";
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-xl p-5 space-y-4 border border-gray-200 dark:border-slate-700 shadow-sm">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Aave Position</h2>
-        {livePosition?._mock && (
-          <span className="text-xs bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-200 px-2 py-1 rounded">MOCK</span>
-        )}
-        {loading && !livePosition && (
-          <span className="text-xs text-gray-400 dark:text-slate-500">loading…</span>
+    <div className="bg-white rounded-2xl border border-gray-200 p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <span className="text-lg">🏛</span>
+        <h2 className="text-base font-semibold text-gray-900">Aave positions</h2>
+        {position?._mock && (
+          <span className="ml-auto text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">mock</span>
         )}
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <Stat label="Health Factor" value={healthFactor} valueClass={hfColor} />
-        <Stat label="Collateral"    value={fmt(livePosition?.totalCollateralUSD)} />
-        <Stat label="Debt"          value={fmt(livePosition?.totalDebtUSD)} />
-        <Stat label="Available"     value={fmt(livePosition?.availableBorrowsUSD)} />
-      </div>
+      {hf !== null && hf < 1.5 && (
+        <div className="mb-4 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-50 border border-red-200">
+          <span className="text-base">⚠️</span>
+          <div>
+            <p className="text-xs font-semibold text-red-700">Liquidation risk — HF {hf.toFixed(2)}</p>
+            <p className="text-xs text-red-500">Agent auto-runs every 60s to supply collateral.</p>
+          </div>
+        </div>
+      )}
+      {hf !== null && hf >= 1.5 && hf < 1.8 && (
+        <div className="mb-4 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-yellow-50 border border-yellow-200">
+          <span className="text-base">⚡</span>
+          <p className="text-xs font-semibold text-yellow-700">Health factor low — agent auto-runs to add collateral</p>
+        </div>
+      )}
 
-      <div className="border-t border-gray-100 dark:border-slate-800 pt-3 grid grid-cols-2 gap-4">
-        <Stat label="Max Tx"   value={policy ? `${Number(policy[2]) / 1e6} USDC` : "—"} small />
-        <Stat label="Cooldown" value={policy ? `${Number(policy[3]) / 60}m`        : "—"} small />
+      <div className="space-y-0 divide-y divide-gray-100">
+        <PositionRow
+          label="Total collateral"
+          value={collateral !== null ? `$${collateral.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "—"}
+          sub="supplied"
+          valueClass="text-gray-900"
+        />
+        <PositionRow
+          label="USDC borrowed"
+          value={debt !== null ? `$${debt.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "—"}
+          sub="debt"
+          valueClass="text-red-600"
+        />
+        <PositionRow
+          label="Available to borrow"
+          value={position?.availableBorrowsUSD != null ? `$${position.availableBorrowsUSD.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "—"}
+          sub="liquidity"
+          valueClass="text-green-700"
+        />
+        <div className="py-4 flex items-center justify-between">
+          <span className="text-sm text-gray-600">Health factor</span>
+          <div className="flex items-center gap-3">
+            <div className="w-32 h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${hfPct}%` }} />
+            </div>
+            <span className={`text-sm font-semibold w-10 text-right ${hfColor}`}>
+              {hf !== null ? hf.toFixed(2) : "—"}
+            </span>
+          </div>
+        </div>
       </div>
-
-      <p className="text-xs text-gray-400 dark:text-slate-500">
-        Live from Aave v3 · Base Sepolia · refreshes every 15s
-      </p>
     </div>
   );
 }
 
-function Stat({ label, value, valueClass = "text-gray-900 dark:text-slate-100", small = false }) {
+function PositionRow({ label, value, sub, valueClass }) {
   return (
-    <div>
-      <p className="text-xs text-gray-400 dark:text-slate-500">{label}</p>
-      <p className={`font-bold ${small ? "text-base" : "text-xl"} ${valueClass}`}>{value}</p>
+    <div className="py-4 flex items-center justify-between">
+      <span className="text-sm text-gray-600">{label}</span>
+      <div className="text-right">
+        <p className={`text-sm font-semibold ${valueClass}`}>{value}</p>
+        <p className="text-xs text-gray-400">{sub}</p>
+      </div>
     </div>
   );
 }

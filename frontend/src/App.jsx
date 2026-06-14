@@ -1,65 +1,46 @@
-import { useEffect, useState } from "react";
-import { useAccount, useConnect, useDisconnect, useReadContract } from "wagmi";
+import { useState } from "react";
+import { useAccount, useConnect, useReadContract } from "wagmi";
 import { injected } from "wagmi/connectors";
 import { VAULT_ADDRESS, VAULT_ABI, VAULT_CHAIN_ID } from "./wagmi";
+import Header       from "./components/Header";
+import StatsRow     from "./components/StatsRow";
 import PositionCard from "./components/PositionCard";
 import PolicyPanel  from "./components/PolicyPanel";
 import ActionFeed   from "./components/ActionFeed";
-import KillSwitch   from "./components/KillSwitch";
-import WalletStatus from "./components/WalletStatus";
 
 export default function App() {
-  const [theme, setTheme] = useState("light");
   const [optimisticRevoked, setOptimisticRevoked] = useState(null);
+  const [position, setPosition] = useState(null);
+  const [log,      setLog]      = useState([]);
 
-  const { address, isConnected } = useAccount();
-  const { connect }    = useConnect();
-  const { disconnect } = useDisconnect();
+  const { isConnected } = useAccount();
+  const { connect }     = useConnect();
 
   const { data: policy, refetch: refetchPolicy } = useReadContract({
-    address: VAULT_ADDRESS,
-    abi: VAULT_ABI,
-    functionName: "getPolicy",
-    chainId: VAULT_CHAIN_ID,
+    address: VAULT_ADDRESS, abi: VAULT_ABI,
+    functionName: "getPolicy", chainId: VAULT_CHAIN_ID,
     query: { enabled: isConnected },
   });
 
   const onChainRevoked = policy?.[1] ?? false;
   const agentRevoked   = optimisticRevoked !== null ? optimisticRevoked : onChainRevoked;
 
-  useEffect(() => {
-    const savedTheme = localStorage.getItem("theme");
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const nextTheme = savedTheme ?? (prefersDark ? "dark" : "light");
-    setTheme(nextTheme);
-    document.documentElement.classList.remove("dark");
-    if (nextTheme === "dark") document.documentElement.classList.add("dark");
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem("theme", theme);
-    document.documentElement.classList.remove("dark");
-    if (theme === "dark") document.documentElement.classList.add("dark");
-  }, [theme]);
-
-  const toggleTheme = () => {
-    setTheme((current) => {
-      const next = current === "dark" ? "light" : "dark";
-      document.documentElement.classList.remove("dark");
-      if (next === "dark") document.documentElement.classList.add("dark");
-      return next;
-    });
-  };
-
   if (!isConnected) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4">
-        <div className="text-center space-y-6">
-          <h1 className="text-3xl font-bold text-brand">One-Agent</h1>
-          <p className="text-gray-500 dark:text-slate-300">On-chain policy firewall for AI DeFi agents</p>
+      <div className="min-h-screen bg-cream flex items-center justify-center px-4">
+        <div className="text-center space-y-5">
+          <div className="flex items-center justify-center gap-2">
+            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center">
+              <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+              </svg>
+            </div>
+            <span className="text-2xl font-bold text-gray-900">One-Agent</span>
+          </div>
+          <p className="text-gray-500 text-sm">On-chain policy firewall for AI DeFi agents</p>
           <button
             onClick={() => connect({ connector: injected() })}
-            className="px-6 py-3 bg-brand text-white rounded-lg font-semibold hover:bg-indigo-500 transition"
+            className="px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-500 transition"
           >
             Connect Wallet
           </button>
@@ -69,53 +50,24 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen p-6 space-y-6 max-w-5xl mx-auto">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-brand">One-Agent</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">On-chain policy firewall for AI DeFi agents</p>
+    <div className="min-h-screen bg-cream">
+      <Header
+        agentRevoked={agentRevoked}
+        setOptimisticRevoked={setOptimisticRevoked}
+        refetchPolicy={refetchPolicy}
+      />
+
+      <main className="max-w-5xl mx-auto px-4 py-6 space-y-4">
+        <StatsRow position={position} log={log} />
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+          <div className="space-y-4">
+            <PositionCard onPosition={setPosition} />
+            <PolicyPanel />
+          </div>
+          <ActionFeed agentRevoked={agentRevoked} onLog={setLog} />
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <span className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
-            agentRevoked
-              ? "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300"
-              : "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
-          }`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${agentRevoked ? "bg-red-500" : "bg-green-500"}`} />
-            {agentRevoked ? "Agent Revoked" : "Agent Active"}
-          </span>
-
-          <button
-            onClick={toggleTheme}
-            className="px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm text-gray-700 hover:bg-gray-100 transition dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-          >
-            {theme === "dark" ? "☾" : "☀"}
-          </button>
-          <span className="text-sm text-gray-500 dark:text-slate-300">
-            {address?.slice(0, 6)}…{address?.slice(-4)}
-          </span>
-          <button
-            onClick={() => disconnect()}
-            className="text-sm text-gray-400 hover:text-gray-600 dark:text-slate-300 dark:hover:text-slate-100"
-          >
-            Disconnect
-          </button>
-        </div>
-      </div>
-
-      <WalletStatus />
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="md:col-span-2"><PositionCard /></div>
-        <KillSwitch
-          optimisticRevoked={optimisticRevoked}
-          setOptimisticRevoked={setOptimisticRevoked}
-          refetchPolicy={refetchPolicy}
-        />
-      </div>
-
-      <PolicyPanel />
-      <ActionFeed agentRevoked={agentRevoked} />
+      </main>
     </div>
   );
 }

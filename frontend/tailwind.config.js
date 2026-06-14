@@ -6,6 +6,7 @@ export default {
     extend: {
       colors: {
         brand: "#6366f1",
+        cream: "#f0ede8",
       },
     },
   },
