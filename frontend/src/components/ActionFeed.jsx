@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
+import { useAccount } from "wagmi";
 
 const AGENT_URL = import.meta.env.VITE_AGENT_URL || "http://localhost:3001";
 
 export default function ActionFeed({ agentRevoked = false, onLog }) {
+  const { address } = useAccount();
   const [log,     setLog]     = useState([]);
   const [loading, setLoading] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
@@ -19,7 +21,11 @@ export default function ActionFeed({ agentRevoked = false, onLog }) {
 
   async function triggerRun() {
     setLoading(true);
-    await fetch(`${AGENT_URL}/run`, { method: "POST" }).catch(() => null);
+    await fetch(`${AGENT_URL}/run`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address }),
+    }).catch(() => null);
     await fetchLog();
     setLoading(false);
   }
@@ -27,7 +33,11 @@ export default function ActionFeed({ agentRevoked = false, onLog }) {
   async function triggerDemo() {
     setDemoResult(null);
     setDemoLoading(true);
-    const res  = await fetch(`${AGENT_URL}/run-demo`, { method: "POST" }).catch(() => null);
+    const res = await fetch(`${AGENT_URL}/run-demo`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address }),
+    }).catch(() => null);
     const data = res?.ok ? await res.json() : null;
     await fetchLog();
     setDemoResult(data);

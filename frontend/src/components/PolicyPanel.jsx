@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useChainId, useSwitchChain } from "wagmi";
 import { VAULT_ADDRESS, VAULT_ABI, VAULT_CHAIN_ID } from "../wagmi";
 
 export default function PolicyPanel() {
@@ -8,6 +8,8 @@ export default function PolicyPanel() {
     functionName: "getPolicy", chainId: VAULT_CHAIN_ID,
   });
 
+  const chainId = useChainId();
+  const { switchChainAsync } = useSwitchChain();
   const { writeContract, isPending, data: txHash } = useWriteContract();
   const { isSuccess } = useWaitForTransactionReceipt({
     hash: txHash, chainId: VAULT_CHAIN_ID,
@@ -67,7 +69,11 @@ export default function PolicyPanel() {
   const curHf    = optimistic?.hfFloor    ?? (policy ? (Number(policy[4]) / 1e18).toFixed(2) : cached?.hfFloor    ?? null);
   const curPrice = optimistic?.priceFloor ?? (policy ? (Number(policy[5]) / 1e8).toFixed(0)  : cached?.priceFloor ?? null);
 
-  function savePolicy() {
+  async function savePolicy() {
+    if (chainId !== VAULT_CHAIN_ID) {
+      try { await switchChainAsync({ chainId: VAULT_CHAIN_ID }); }
+      catch { return; }
+    }
     writeContract({
       address: VAULT_ADDRESS, abi: VAULT_ABI, chainId: VAULT_CHAIN_ID,
       functionName: "setPolicy",

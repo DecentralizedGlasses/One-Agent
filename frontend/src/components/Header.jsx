@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useAccount, useConnect, useDisconnect, useWriteContract, useWaitForTransactionReceipt, useEnsName } from "wagmi";
+import { useAccount, useConnect, useDisconnect, useWriteContract, useWaitForTransactionReceipt, useEnsName, useChainId, useSwitchChain } from "wagmi";
 import { mainnet, sepolia } from "wagmi/chains";
 import { injected } from "wagmi/connectors";
 import { VAULT_ADDRESS, VAULT_ABI, VAULT_CHAIN_ID } from "../wagmi";
@@ -13,6 +13,8 @@ export default function Header({ agentRevoked, setOptimisticRevoked, refetchPoli
   const { data: ensNameSepolia } = useEnsName({ address, chainId: sepolia.id });
   const ensName = ensNameMainnet ?? ensNameSepolia ?? import.meta.env.VITE_MOCK_ENS ?? null;
 
+  const chainId = useChainId();
+  const { switchChainAsync } = useSwitchChain();
   const { writeContract, isPending, data: txHash } = useWriteContract();
 
   const { isSuccess } = useWaitForTransactionReceipt({
@@ -28,7 +30,12 @@ export default function Header({ agentRevoked, setOptimisticRevoked, refetchPoli
     }
   }, [isSuccess]);
 
-  function toggleKillSwitch() {
+  async function toggleKillSwitch() {
+    // Switch to the correct chain first so MetaMask only shows one popup (the tx)
+    if (chainId !== VAULT_CHAIN_ID) {
+      try { await switchChainAsync({ chainId: VAULT_CHAIN_ID }); }
+      catch { return; }
+    }
     if (agentRevoked) {
       setOptimisticRevoked(false);
       writeContract({

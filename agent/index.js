@@ -2,7 +2,7 @@ import "dotenv/config";
 import Anthropic from "@anthropic-ai/sdk";
 import { createPublicClient, createWalletClient, http, encodeFunctionData, parseAbi } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { sepolia } from "viem/chains";
+import { baseSepolia } from "viem/chains";
 import express from "express";
 import cors from "cors";
 
@@ -11,20 +11,28 @@ const anthropic = process.env.ANTHROPIC_API_KEY
   : null;
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const VAULT_ADDRESS = process.env.POLICY_VAULT_ADDRESS;
-const OWNER_ADDRESS = process.env.OWNER_ADDRESS;
-// Ethereum Sepolia Aave V3 pool — must match what the vault's whitelist was deployed with
-const AAVE_POOL     = "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951";
-const USDC          = "0x94a9D9AC8a22534E3FaCa9F4e7F2E2cf85d5E4C8"; // Aave testnet USDC on Sepolia
+const VAULT_ADDRESS   = process.env.POLICY_VAULT_ADDRESS;
+const FALLBACK_OWNER  = process.env.OWNER_ADDRESS;
+// Base Sepolia Aave V3 pool — matches the vault whitelist deployed on Base Sepolia
+const AAVE_POOL       = "0x8bAB6d1b75f19e9eD9fCe8b9BD338844fF79aE27";
+const USDC            = "0xba50Cd2A20f6DA35D788639E581bca8d0B5d4D5f"; // USDC on this Base Sepolia Aave pool
 
-const account          = privateKeyToAccount(process.env.PRIVATE_KEY);
-const sepoliaTransport = http(process.env.RPC_URL || "https://rpc.sepolia.org");
-const publicClient     = createPublicClient({ chain: sepolia, transport: sepoliaTransport });
-const walletClient     = createWalletClient({ account, chain: sepolia, transport: sepoliaTransport });
+const account       = privateKeyToAccount(process.env.PRIVATE_KEY);
+const transport     = http(process.env.BASE_SEPOLIA_RPC_URL);
+const publicClient  = createPublicClient({ chain: baseSepolia, transport });
+const walletClient  = createWalletClient({ account, chain: baseSepolia, transport });
 
 // ── ABIs ──────────────────────────────────────────────────────────────────────
 const VAULT_ABI = parseAbi([
   "function execute(address target, uint256 amount, bytes calldata callData) external returns (bytes memory)",
+  "error Revoked()",
+  "error TargetNotAllowed(address target)",
+  "error AmountExceedsLimit(uint256 requested, uint256 limit)",
+  "error CooldownActive(uint256 availableAt, uint256 now_)",
+  "error HealthFactorTooLow(uint256 current, uint256 floor)",
+  "error PriceBelowFloor(int256 current, int256 floor)",
+  "error CallFailed(bytes reason)",
+  "error NotAgent()",
 ]);
 
 const AAVE_ABI = parseAbi([
@@ -41,23 +49,18 @@ function logAction(entry) {
 }
 
 // ── Aave position ─────────────────────────────────────────────────────────────
-const IS_LOCAL = (process.env.RPC_URL || "").includes("127.0.0.1") ||
-                 (process.env.RPC_URL || "").includes("localhost");
-
-async function getPosition() {
-  if (IS_LOCAL) {
-    return { totalCollateralUSD: 5000, totalDebtUSD: 2000,
-             availableBorrowsUSD: 1500, healthFactor: 2.1, _mock: true };
-  }
+async function getPosition(userAddress) {
+  const addr = userAddress || FALLBACK_OWNER;
   const [col, debt, borrows, , , hf] = await publicClient.readContract({
     address: AAVE_POOL, abi: AAVE_ABI,
-    functionName: "getUserAccountData", args: [OWNER_ADDRESS],
+    functionName: "getUserAccountData", args: [addr],
   });
+  const MAX = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
   return {
     totalCollateralUSD:  Number(col)     / 1e8,
     totalDebtUSD:        Number(debt)    / 1e8,
     availableBorrowsUSD: Number(borrows) / 1e8,
-    healthFactor:        Number(hf)      / 1e18,
+    healthFactor:        hf >= MAX ? null : Number(hf) / 1e18,
   };
 }
 
@@ -67,7 +70,7 @@ async function askClaude(position, aggressive = false) {
     if (aggressive) return { action: "withdraw", amount: 750, reason: "Rebalancing portfolio — withdrawing 750 USDC to capture external yield opportunity." };
     if (position.healthFactor < 1.5) return { action: "supply", amount: 300, reason: "EMERGENCY: health factor critically low — supplying collateral to avoid liquidation." };
     if (position.healthFactor < 1.8) return { action: "supply", amount: 150, reason: "Health factor below safe threshold — adding collateral." };
-    return { action: "withdraw", amount: 300, reason: "Health factor strong — withdrawing 300 USDC to rebalance liquidity." };
+    return { action: "withdraw", amount: 150, reason: "Health factor strong — withdrawing 150 USDC to rebalance liquidity." };
   }
 
   const prompt = aggressive
@@ -106,31 +109,36 @@ Your job is to actively manage this portfolio. You must always take an action �
 
 Rules (enforced on-chain by PolicyVault — not your concern):
 - If health factor < 1.8: supply 100–300 USDC as collateral to stay safe.
-- If health factor >= 1.8: withdraw 200–400 USDC to optimize liquidity elsewhere.
+- If health factor >= 1.8: withdraw 100–200 USDC to optimize liquidity elsewhere.
 
 Reply with JSON only: { "action": "supply"|"withdraw", "amount": <number>, "reason": "<one sentence explaining the decision>" }`;
 
-  const resp  = await anthropic.messages.create({
-    model: "claude-sonnet-4-6", max_tokens: 200,
+  const resp = await anthropic.messages.create({
+    model: "claude-sonnet-4-6", max_tokens: 300,
     messages: [{ role: "user", content: prompt }],
   });
-  const text  = resp.content[0]?.text ?? "";
-  const match = text.match(/\{[\s\S]*\}/);
-  return match ? JSON.parse(match[0]) : { action: "none", reason: "Could not parse Claude response." };
+  const text = resp.content[0]?.text ?? "";
+  // Claude sometimes returns multiple JSON blocks — take the last valid one with an action field
+  const matches = [...text.matchAll(/\{[^{}]+\}/g)];
+  for (const m of matches.reverse()) {
+    try {
+      const parsed = JSON.parse(m[0]);
+      if (parsed.action) return parsed;
+    } catch {}
+  }
+  return { action: "none", reason: "Could not parse Claude response." };
 }
 
 // ── Execute decision through PolicyVault ──────────────────────────────────────
-async function submitAction(decision) {
+async function submitAction(decision, userAddress) {
   if (decision.action === "none") return null;
 
-  const target    = IS_LOCAL ? "0x0000000000000000000000000000000000000001" : AAVE_POOL;
-  const amountRaw = BigInt(Math.floor((decision.amount ?? 0) * 1e6));
-
-  const callData = IS_LOCAL
-    ? "0x"
-    : decision.action === "supply"
-      ? encodeFunctionData({ abi: AAVE_ABI, functionName: "supply",   args: [USDC, amountRaw, OWNER_ADDRESS, 0] })
-      : encodeFunctionData({ abi: AAVE_ABI, functionName: "withdraw", args: [USDC, amountRaw, OWNER_ADDRESS] });
+  const onBehalfOf = userAddress || FALLBACK_OWNER;
+  const amountRaw  = BigInt(Math.floor((decision.amount ?? 0) * 1e6));
+  const callData   = decision.action === "supply"
+    ? encodeFunctionData({ abi: AAVE_ABI, functionName: "supply",   args: [USDC, amountRaw, onBehalfOf, 0] })
+    : encodeFunctionData({ abi: AAVE_ABI, functionName: "withdraw", args: [USDC, amountRaw, onBehalfOf] });
+  const target = AAVE_POOL;
 
   return walletClient.writeContract({
     address: VAULT_ADDRESS, abi: VAULT_ABI,
@@ -139,32 +147,41 @@ async function submitAction(decision) {
 }
 
 // ── Parse vault revert → human reason ────────────────────────────────────────
-function parseBlockReason(errMsg, decision) {
-  const amt = decision?.amount ?? "?";
-  const act = decision?.action ?? "action";
-  if (errMsg?.includes("AmountExceedsLimit")) {
-    return { rule: "SpendCap",    reason: `Agent tried to ${act} $${amt} USDC but it exceeds your per-transaction spend cap.` };
+function parseBlockReason(err, decision) {
+  const amt      = decision?.amount ?? "?";
+  const act      = decision?.action ?? "action";
+  const errName  = err?.cause?.data?.errorName ?? err?.name ?? "";
+  const errMsg   = err?.message ?? "";
+
+  if (errName === "AmountExceedsLimit" || errMsg.includes("AmountExceedsLimit")) {
+    return { rule: "SpendCap",     reason: `Agent tried to ${act} $${amt} USDC — exceeds your ${500} USDC per-transaction spend cap.` };
   }
-  if (errMsg?.includes("Revoked")) {
-    return { rule: "KillSwitch",  reason: "Agent has been emergency-revoked by the owner. All transactions are blocked." };
+  if (errName === "Revoked" || errMsg.includes("Revoked")) {
+    return { rule: "KillSwitch",   reason: "Agent is emergency-revoked. All transactions blocked until reinstated." };
   }
-  if (errMsg?.includes("CooldownActive")) {
-    return { rule: "Cooldown",    reason: "A transaction was made recently. The cooldown period is still active." };
+  if (errName === "CooldownActive" || errMsg.includes("CooldownActive")) {
+    return { rule: "Cooldown",     reason: "Cooldown period is still active — too soon since the last transaction." };
   }
-  if (errMsg?.includes("TargetNotAllowed")) {
-    return { rule: "Whitelist",   reason: "The target contract is not on the protocol whitelist." };
+  if (errName === "TargetNotAllowed" || errMsg.includes("TargetNotAllowed")) {
+    return { rule: "Whitelist",    reason: "Target contract is not on the protocol whitelist." };
   }
-  if (errMsg?.includes("HealthFactorTooLow")) {
-    return { rule: "HealthFactor",reason: "Transaction blocked — health factor would drop below the policy floor." };
+  if (errName === "HealthFactorTooLow" || errMsg.includes("HealthFactorTooLow")) {
+    return { rule: "HealthFactor", reason: "Transaction blocked — health factor would drop below the policy floor." };
   }
-  return { rule: "PolicyVault",   reason: `Transaction blocked by PolicyVault.` };
+  if (errName === "PriceBelowFloor" || errMsg.includes("PriceBelowFloor")) {
+    return { rule: "PriceFloor",   reason: "ETH price is below your Chainlink price floor — no selling allowed." };
+  }
+  if (errName === "CallFailed" || errMsg.includes("CallFailed")) {
+    return { rule: "CallFailed",   reason: `Aave call failed — vault may need USDC balance to ${act}.` };
+  }
+  return { rule: "PolicyVault",    reason: `Transaction blocked by PolicyVault (${errName || "unknown error"}).` };
 }
 
 // ── Main agent cycle ──────────────────────────────────────────────────────────
-async function runCycle(aggressive = false) {
+async function runCycle(aggressive = false, userAddress = null) {
   let decision = null;
   try {
-    const position = await getPosition();
+    const position = await getPosition(userAddress);
     decision = await askClaude(position, aggressive);
 
     if (!decision.action || decision.action === "none") {
@@ -173,13 +190,13 @@ async function runCycle(aggressive = false) {
       return entry;
     }
 
-    const hash = await submitAction(decision);
+    const hash = await submitAction(decision, userAddress);
     const entry = { status: "allowed", decision, hash: hash ?? null };
     logAction(entry);
     return entry;
 
   } catch (err) {
-    const { rule, reason } = parseBlockReason(err.message, decision);
+    const { rule, reason } = parseBlockReason(err, decision);
     const entry = { status: "blocked", rule, reason, decision };
     logAction(entry);
     return entry;
@@ -191,10 +208,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.get("/position",  async (_, res) => res.json(await getPosition().catch(e => ({ error: e.message }))));
+app.get("/position",  async (req, res) => res.json(await getPosition(req.query.address).catch(e => ({ error: e.message }))));
 app.get("/log",       (_, res) => res.json(actionLog));
-app.post("/run",      async (_, res) => res.json(await runCycle(false)));
-app.post("/run-demo", async (_, res) => res.json(await runCycle(true)));
+app.post("/run",      async (req, res) => res.json(await runCycle(false, req.body?.address)));
+app.post("/run-demo", async (req, res) => res.json(await runCycle(true,  req.body?.address)));
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`[agent] listening on :${PORT}`));
@@ -207,7 +224,7 @@ let lastAlertTs = 0;
 
 async function monitor() {
   try {
-    const position = await getPosition();
+    const position = await getPosition(FALLBACK_OWNER);
     const hf = position.healthFactor;
 
     if (hf < 1.5) {

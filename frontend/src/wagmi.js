@@ -1,8 +1,8 @@
 import { parseAbi } from "viem";
-import { sepolia } from "wagmi/chains";
+import { baseSepolia } from "wagmi/chains";
 
 export const VAULT_ADDRESS  = import.meta.env.VITE_VAULT_ADDRESS;
-export const VAULT_CHAIN_ID = sepolia.id;
+export const VAULT_CHAIN_ID = baseSepolia.id;
 
 export const VAULT_ABI = parseAbi([
   "function getPolicy() external view returns (address, bool, uint256, uint256, uint256, int256, uint256, address[])",
