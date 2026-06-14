@@ -82,7 +82,7 @@ export default function PolicyPanel() {
 
   const rules = [
     {
-      icon: "💲", iconBg: "bg-blue-100",
+      icon: "$", iconBg: "bg-blue-100",
       label: "Max spend per tx",
       display: curMax ? `${curMax} USDC limit` : "—",
       editKey: "maxTx", state: maxTx, set: setMaxTx, placeholder: curMax ?? "500", step: "1", suffix: "USDC",
@@ -100,7 +100,7 @@ export default function PolicyPanel() {
       editKey: "cooldown", state: cooldown, set: setCooldown, placeholder: curCd ?? "30", step: "1", suffix: "minutes",
     },
     {
-      icon: "📺", iconBg: "bg-red-100",
+      icon: "모", iconBg: "bg-red-100",
       label: "Auto-kill threshold",
       display: curHf ? `Trigger if health < ${curHf}` : "—",
       editKey: "hfFloor", state: hfFloor, set: setHfFloor, placeholder: curHf ?? "1.50", step: "0.01", suffix: "",
