@@ -1,23 +1,27 @@
 import { useEffect, useState } from "react";
 import { useReadContract } from "wagmi";
 import { VAULT_ADDRESS, VAULT_ABI } from "../wagmi";
+import { useResolvedAddress } from "../hooks/useResolvedAddress";
 
 const AGENT_URL = import.meta.env.VITE_AGENT_URL || "http://localhost:3001";
 
 export default function PositionCard() {
   const [livePosition, setLivePosition] = useState(null);
   const [loading, setLoading] = useState(true);
+  const { resolvedAddress: vaultAddress } = useResolvedAddress(VAULT_ADDRESS);
 
   const { data: hf } = useReadContract({
-    address: VAULT_ADDRESS,
+    address: vaultAddress,
     abi: VAULT_ABI,
     functionName: "getHealthFactor",
+    query: { enabled: Boolean(vaultAddress) },
   });
 
   const { data: policy } = useReadContract({
-    address: VAULT_ADDRESS,
+    address: vaultAddress,
     abi: VAULT_ABI,
     functionName: "getPolicy",
+    query: { enabled: Boolean(vaultAddress) },
   });
 
   useEffect(() => {

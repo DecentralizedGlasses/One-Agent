@@ -1,12 +1,15 @@
 import { useState } from "react";
 import { useReadContract, useWriteContract } from "wagmi";
 import { VAULT_ADDRESS, VAULT_ABI } from "../wagmi";
+import { useResolvedAddress } from "../hooks/useResolvedAddress";
 
 export default function PolicyPanel() {
+  const { resolvedAddress: vaultAddress } = useResolvedAddress(VAULT_ADDRESS);
   const { data: policy, refetch } = useReadContract({
-    address: VAULT_ADDRESS,
+    address: vaultAddress,
     abi: VAULT_ABI,
     functionName: "getPolicy",
+    query: { enabled: Boolean(vaultAddress) },
   });
 
   const { writeContract, isPending } = useWriteContract();
@@ -23,8 +26,10 @@ export default function PolicyPanel() {
   const isRevoked    = policy?.[1] ?? false;
 
   function savePolicy() {
+    if (!vaultAddress) return;
+
     writeContract({
-      address: VAULT_ADDRESS,
+      address: vaultAddress,
       abi: VAULT_ABI,
       functionName: "setPolicy",
       args: [
@@ -98,7 +103,7 @@ export default function PolicyPanel() {
 
       <button
         onClick={savePolicy}
-        disabled={isPending || !maxTx || !cooldown || !hfFloor || !priceFloor}
+        disabled={isPending || !vaultAddress || !maxTx || !cooldown || !hfFloor || !priceFloor}
         className="px-4 py-2 bg-brand rounded-lg text-sm font-semibold hover:bg-indigo-500 disabled:opacity-40 transition text-white"
       >
         {isPending ? "Saving…" : "Save Policy"}

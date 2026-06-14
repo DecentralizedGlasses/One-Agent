@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAccount, useReadContract, useWriteContract } from "wagmi";
 import { VAULT_ADDRESS, VAULT_ABI } from "../wagmi";
+import { useResolvedAddress } from "../hooks/useResolvedAddress";
 
 const AGENT_URL = import.meta.env.VITE_AGENT_URL || "http://localhost:3001";
 
@@ -8,11 +9,17 @@ export default function KillSwitch() {
   const { isConnected } = useAccount();
   const [agentLog, setAgentLog] = useState([]);
   const [agentOnline, setAgentOnline] = useState(null);
+  const {
+    resolvedAddress: vaultAddress,
+    isResolving: isResolvingVault,
+    resolveError: vaultResolveError,
+  } = useResolvedAddress(VAULT_ADDRESS);
 
   const { data: policy, isLoading, isError, refetch } = useReadContract({
-    address: VAULT_ADDRESS,
+    address: vaultAddress,
     abi: VAULT_ABI,
     functionName: "getPolicy",
+    query: { enabled: Boolean(vaultAddress) },
   });
 
   const { writeContract, isPending } = useWriteContract();
@@ -25,6 +32,24 @@ export default function KillSwitch() {
         label: "Wallet disconnected",
         detail: "Connect a wallet to manage agent protection.",
         color: "bg-gray-400",
+        pulse: false,
+      };
+    }
+
+    if (isResolvingVault) {
+      return {
+        label: "Resolving vault ENS",
+        detail: `Resolving ${VAULT_ADDRESS} to an address.`,
+        color: "bg-yellow-400",
+        pulse: true,
+      };
+    }
+
+    if (vaultResolveError || !vaultAddress) {
+      return {
+        label: "Vault address unresolved",
+        detail: vaultResolveError || "Set VITE_VAULT_ADDRESS to a valid address or ENS name.",
+        color: "bg-yellow-500",
         pulse: false,
       };
     }
@@ -107,7 +132,7 @@ export default function KillSwitch() {
       color: "bg-green-500",
       pulse: true,
     };
-  }, [agentOnline, isConnected, isError, isLoading, isRevoked, latestAction]);
+  }, [agentOnline, isConnected, isError, isLoading, isResolvingVault, isRevoked, latestAction, vaultAddress, vaultResolveError]);
 
   async function fetchAgentLog() {
     const res = await fetch(`${AGENT_URL}/log`).catch(() => null);
@@ -127,8 +152,10 @@ export default function KillSwitch() {
   }, []);
 
   function toggle() {
+    if (!vaultAddress) return;
+
     writeContract({
-      address: VAULT_ADDRESS,
+      address: vaultAddress,
       abi: VAULT_ABI,
       functionName: isRevoked ? "reinstateAgent" : "emergencyRevoke",
       args: [],
@@ -148,7 +175,7 @@ export default function KillSwitch() {
 
       <button
         onClick={toggle}
-        disabled={isPending || !isConnected || isLoading || isError}
+        disabled={isPending || !isConnected || !vaultAddress || isResolvingVault || isLoading || isError}
         className={`w-full py-3 rounded-lg font-bold text-sm transition disabled:opacity-40 ${
           isRevoked
             ? "bg-green-600 hover:bg-green-500 text-white"
