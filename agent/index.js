@@ -2,7 +2,7 @@ import "dotenv/config";
 import Anthropic from "@anthropic-ai/sdk";
 import { createPublicClient, createWalletClient, http, encodeFunctionData, parseAbi } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { sepolia, baseSepolia } from "viem/chains";
+import { sepolia } from "viem/chains";
 import express from "express";
 import cors from "cors";
 
@@ -13,13 +13,13 @@ const anthropic = process.env.ANTHROPIC_API_KEY
 // ── Config ────────────────────────────────────────────────────────────────────
 const VAULT_ADDRESS = process.env.POLICY_VAULT_ADDRESS;
 const OWNER_ADDRESS = process.env.OWNER_ADDRESS;
-const AAVE_POOL     = "0x8bAB6d1b75f19e9eD9fCe8b9BD338844fF79aE27";
-const USDC          = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
+// Ethereum Sepolia Aave V3 pool — must match what the vault's whitelist was deployed with
+const AAVE_POOL     = "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951";
+const USDC          = "0x94a9D9AC8a22534E3FaCa9F4e7F2E2cf85d5E4C8"; // Aave testnet USDC on Sepolia
 
 const account          = privateKeyToAccount(process.env.PRIVATE_KEY);
-const baseTransport    = http(process.env.BASE_SEPOLIA_RPC_URL || "https://base-sepolia.drpc.org");
 const sepoliaTransport = http(process.env.RPC_URL || "https://rpc.sepolia.org");
-const publicClient     = createPublicClient({ chain: baseSepolia, transport: baseTransport });
+const publicClient     = createPublicClient({ chain: sepolia, transport: sepoliaTransport });
 const walletClient     = createWalletClient({ account, chain: sepolia, transport: sepoliaTransport });
 
 // ── ABIs ──────────────────────────────────────────────────────────────────────
