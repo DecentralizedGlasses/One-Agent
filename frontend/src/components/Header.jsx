@@ -1,12 +1,14 @@
 import { useEffect } from "react";
 import { useAccount, useConnect, useDisconnect, useWriteContract, useWaitForTransactionReceipt, useEnsName } from "wagmi";
-import { mainnet } from "wagmi/chains";
+import { mainnet, sepolia } from "wagmi/chains";
 import { injected } from "wagmi/connectors";
 import { VAULT_ADDRESS, VAULT_ABI, VAULT_CHAIN_ID } from "../wagmi";
 
 export default function Header({ agentRevoked, setOptimisticRevoked, refetchPolicy }) {
   const { address, isConnected } = useAccount();
-  const { data: ensName } = useEnsName({ address, chainId: mainnet.id });
+  const { data: ensNameMainnet } = useEnsName({ address, chainId: mainnet.id });
+  const { data: ensNameSepolia } = useEnsName({ address, chainId: sepolia.id });
+  const ensName = ensNameMainnet ?? ensNameSepolia;
   const { connect }    = useConnect();
   const { disconnect } = useDisconnect();
 
