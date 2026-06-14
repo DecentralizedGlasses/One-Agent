@@ -1,10 +1,12 @@
 import { useEffect } from "react";
-import { useAccount, useConnect, useDisconnect, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useAccount, useConnect, useDisconnect, useWriteContract, useWaitForTransactionReceipt, useEnsName } from "wagmi";
+import { mainnet } from "wagmi/chains";
 import { injected } from "wagmi/connectors";
 import { VAULT_ADDRESS, VAULT_ABI, VAULT_CHAIN_ID } from "../wagmi";
 
 export default function Header({ agentRevoked, setOptimisticRevoked, refetchPolicy }) {
   const { address, isConnected } = useAccount();
+  const { data: ensName } = useEnsName({ address, chainId: mainnet.id });
   const { connect }    = useConnect();
   const { disconnect } = useDisconnect();
 
@@ -62,12 +64,12 @@ export default function Header({ agentRevoked, setOptimisticRevoked, refetchPoli
                 <span className="text-sm text-gray-600">{agentRevoked ? "Agent stopped" : "Agent active"}</span>
               </div>
 
-              {/* Wallet address */}
+              {/* Wallet address / ENS name */}
               <button
                 onClick={() => disconnect()}
                 className="text-sm bg-gray-100 hover:bg-gray-200 rounded-lg px-3 py-1.5 text-gray-700 font-mono transition"
               >
-                {address?.slice(0, 6)}…{address?.slice(-4)}
+                {ensName ?? `${address?.slice(0, 6)}…${address?.slice(-4)}`}
               </button>
 
               {/* Kill Switch */}
