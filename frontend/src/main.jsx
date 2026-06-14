@@ -34,6 +34,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         environmentId: dynamicEnvironmentId ?? "",
         walletConnectors: [EthereumWalletConnectors],
         appName: "One-Agent",
+        initialAuthenticationMode: "connect-only",
       }}
     >
       <WagmiProvider config={wagmiConfig}>
