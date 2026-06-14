@@ -44,21 +44,24 @@ export default function PolicyPanel() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Field
-          label={`Max Tx Amount (USDC) — current: ${currentMax}`}
+          label="Max Tx Amount (USDC)"
+          current={currentMax}
           value={maxTx}
           onChange={setMaxTx}
           placeholder={currentMax}
           step="0.01"
         />
         <Field
-          label={`Cooldown (minutes) — current: ${currentCd}`}
+          label="Cooldown (minutes)"
+          current={currentCd}
           value={cooldown}
           onChange={setCooldown}
           placeholder={currentCd}
           integersOnly
         />
         <Field
-          label={`Health Factor Floor — current: ${currentHf}`}
+          label="Health Factor Floor"
+          current={currentHf}
           value={hfFloor}
           onChange={setHfFloor}
           placeholder={currentHf}
@@ -88,7 +91,7 @@ export default function PolicyPanel() {
   );
 }
 
-function Field({ label, value, onChange, placeholder, integersOnly = false, step = "1" }) {
+function Field({ label, current, value, onChange, placeholder, integersOnly = false, step = "1" }) {
   const numericPattern = integersOnly ? /^\d*$/ : /^\d*(\.\d*)?$/;
 
   function handleChange(nextValue) {
@@ -105,7 +108,10 @@ function Field({ label, value, onChange, placeholder, integersOnly = false, step
 
   return (
     <div className="space-y-1">
-      <label className="text-xs text-gray-400 dark:text-slate-500">{label}</label>
+      <label className="text-xs text-gray-400 dark:text-slate-500">
+        <span className="font-bold text-brand dark:text-indigo-300">{label}</span>
+        <span>{` - current: ${current}`}</span>
+      </label>
       <input
         type="number"
         inputMode={integersOnly ? "numeric" : "decimal"}

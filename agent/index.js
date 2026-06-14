@@ -1,5 +1,4 @@
 import "dotenv/config";
-import Anthropic from "@anthropic-ai/sdk";
 import { createPublicClient, createWalletClient, http, encodeFunctionData, parseAbi } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { sepolia } from "viem/chains";
@@ -68,11 +67,9 @@ async function getPosition() {
   };
 }
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-// Ask Claude what to do (or use mock if no API key)
-async function askClaude(position) {
-  if (!process.env.ANTHROPIC_API_KEY) {
+// Ask Gemini what to do (or use mock if no API key)
+async function askGemini(position) {
+  if (!process.env.GEMINI_API_KEY) {
     console.log("[agent] No API key — using mock decision");
     if (position.healthFactor < 1.8) {
       return { action: "supply", amount: 200, reason: "Health factor low — supplying 200 USDC to improve position" };
@@ -80,12 +77,7 @@ async function askClaude(position) {
     return { action: "none", reason: "Position is healthy — no action needed" };
   }
 
-  const resp = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 256,
-    messages: [{
-      role: "user",
-      content: `You are an AI DeFi agent managing an Aave v3 position on Ethereum Sepolia.
+  const prompt = `You are an AI DeFi agent managing an Aave v3 position on Ethereum Sepolia.
 
 Current position:
 - Collateral: $${position.totalCollateralUSD.toFixed(2)}
@@ -98,12 +90,29 @@ Rules (enforced by on-chain PolicyVault — not your job to check):
 - 30-minute cooldown between actions
 - Auto-blocked if health factor < 1.5
 
-Respond with JSON only: { "action": "supply" | "withdraw" | "none", "amount": <USDC>, "reason": "<one sentence>" }`,
-    }],
+Respond with JSON only: { "action": "supply" | "withdraw" | "none", "amount": <USDC>, "reason": "<one sentence>" }`;
+
+  const modelPath = GEMINI_MODEL.startsWith("models/") ? GEMINI_MODEL : `models/${GEMINI_MODEL}`;
+  const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/${modelPath}:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        maxOutputTokens: 256,
+        responseMimeType: "application/json",
+      },
+    }),
   });
 
-  const match = resp.content[0].text.match(/\{[\s\S]*\}/);
-  return match ? JSON.parse(match[0]) : { action: "none", reason: "parse error" };
+  const body = await resp.json();
+  if (!resp.ok) {
+    throw new Error(body.error?.message || `Gemini request failed with status ${resp.status}`);
+  }
+
+  const text = body.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") ?? "";
+  const match = text.match(/\{[\s\S]*\}/);
+  return match ? JSON.parse(match[0]) : { action: "none", reason: "Gemini parse error" };
 }
 
 // ── Submit action through PolicyVault ────────────────────────────────────────
@@ -134,7 +143,7 @@ async function submitAction(decision) {
 async function runCycle() {
   try {
     const position = await getPosition();
-    const decision = await askClaude(position);
+    const decision = await askGemini(position);
     const hash     = await submitAction(decision);
 
     const entry = { status: "allowed", position, decision, hash: hash ?? null };
