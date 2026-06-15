@@ -31,6 +31,14 @@ PolicyVault.sol  ◄──── AI Agent (Node.js + Claude API)
    Aave v3 / DeFi Protocols
 ```
 
+Keep these handy:
+- Vault: 0x1A34Cd8B9F84a2fF2ee146962F36949CAC121CA6 on Base Sepolia
+- Agent runs on: http://localhost:3001
+- Frontend runs on: http://localhost:5173
+- GitHub: github.com/DecentralizedGlasses/One-Agent
+- Live site: one-agent-seven.vercel.app
+
+
 - **Smart contract** — `src/PolicyVault.sol` — Solidity 0.8.20, deployed on Base Sepolia
 - **Agent backend** — `agent/index.js` — Express server, calls Claude API, submits actions through the vault
 - **Dashboard** — `frontend/` — React + Vite + Tailwind + wagmi, reads live on-chain state
