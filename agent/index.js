@@ -20,9 +20,8 @@ const USDC            = "0xba50Cd2A20f6DA35D788639E581bca8d0B5d4D5f";
 // aUSDC — the receipt token minted by Aave when USDC is supplied; vault must hold this to withdraw
 const A_USDC          = "0x10F1A9D11CDf50041f3f8cB7191CBE2f31750ACC";
 
-// Spend cap demo uses an amount that clearly exceeds the on-chain maxTxAmount
-// The vault's current maxTxAmount is 1000 USDC; 2000 will always trigger the cap
-const DEMO_EXCEED_AMOUNT = 2000;
+// Spend cap demo: multiplier applied to the live maxTxAmount to guarantee the cap fires
+const DEMO_EXCEED_MULTIPLIER = 2;
 
 const account       = privateKeyToAccount(process.env.PRIVATE_KEY);
 const transport     = http(process.env.BASE_SEPOLIA_RPC_URL);
@@ -145,10 +144,13 @@ async function ensureSetup() {
 }
 
 // ── Claude: decide what the agent should do ───────────────────────────────────
-async function askClaude(position, aggressive = false) {
-  // Demo mode: always use the hardcoded large amount so the spend cap is reliably triggered.
-  // Claude's decision is not relevant here — we just need to exceed maxTxAmount.
-  if (aggressive) return { action: "withdraw", amount: DEMO_EXCEED_AMOUNT, reason: `Aggressive rebalance — attempting to withdraw $${DEMO_EXCEED_AMOUNT} USDC to demonstrate the spend cap firewall.` };
+async function askClaude(position, aggressive = false, maxTxAmount = null) {
+  // Demo mode: always exceed the live on-chain spend cap to reliably trigger the firewall.
+  if (aggressive) {
+    const capUsdc = maxTxAmount ? Number(maxTxAmount) / 1e6 : 1000;
+    const demoAmount = Math.ceil(capUsdc * DEMO_EXCEED_MULTIPLIER);
+    return { action: "withdraw", amount: demoAmount, reason: `Aggressive rebalance — attempting to withdraw $${demoAmount} USDC to demonstrate the spend cap firewall.` };
+  }
 
   if (!anthropic) {
     if (position.healthFactor !== null && position.healthFactor < 1.5) return { action: "supply", amount: 300, reason: "EMERGENCY: health factor critically low — supplying collateral to avoid liquidation." };
@@ -260,25 +262,21 @@ function parseBlockReason(err, decision, maxTxAmount) {
 }
 
 // ── Main agent cycle ──────────────────────────────────────────────────────────
-let cachedMaxTxAmount = null;
-
 async function runCycle(aggressive = false, userAddress = null) {
   let decision = null;
+  let maxTxAmount = null;
   try {
-    // Cache the spend cap so error messages show the correct value
-    if (!cachedMaxTxAmount) {
-      const policy = await publicClient.readContract({
-        address: VAULT_ADDRESS, abi: VAULT_ABI,
-        functionName: "getPolicy",
-      });
-      cachedMaxTxAmount = policy[2];
-    }
-
-    const [position, vaultBal] = await Promise.all([getPosition(userAddress), getVaultBalances()]);
+    // Read live policy on every cycle so error messages reflect the current on-chain limit
+    const [policy, position, vaultBal] = await Promise.all([
+      publicClient.readContract({ address: VAULT_ADDRESS, abi: VAULT_ABI, functionName: "getPolicy" }),
+      getPosition(userAddress),
+      getVaultBalances(),
+    ]);
+    maxTxAmount = policy[2];
     const vaultUsdcUsdc  = Number(vaultBal.usdcRaw)  / 1e6; // vault USDC available to supply
     const vaultAusdcUsdc = Number(vaultBal.ausdcRaw) / 1e6; // vault aUSDC available to withdraw
 
-    decision = await askClaude(position, aggressive);
+    decision = await askClaude(position, aggressive, maxTxAmount);
 
     if (!decision.action || decision.action === "none") {
       const entry = { status: "idle", reason: "Agent scanned position — no action needed", decision };
@@ -316,7 +314,7 @@ async function runCycle(aggressive = false, userAddress = null) {
     return entry;
 
   } catch (err) {
-    const { rule, reason } = parseBlockReason(err, decision, cachedMaxTxAmount);
+    const { rule, reason } = parseBlockReason(err, decision, maxTxAmount);
     const entry = { status: "blocked", rule, reason, decision };
     logAction(entry);
     return entry;
