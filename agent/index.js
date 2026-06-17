@@ -1,6 +1,6 @@
 import "dotenv/config";
 import Anthropic from "@anthropic-ai/sdk";
-import { createPublicClient, createWalletClient, http, encodeFunctionData, parseAbi } from "viem";
+import { createPublicClient, createWalletClient, http, encodeFunctionData, parseAbi, maxUint256 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { baseSepolia } from "viem/chains";
 import express from "express";
@@ -13,9 +13,16 @@ const anthropic = process.env.ANTHROPIC_API_KEY
 // ── Config ────────────────────────────────────────────────────────────────────
 const VAULT_ADDRESS   = process.env.POLICY_VAULT_ADDRESS;
 const FALLBACK_OWNER  = process.env.OWNER_ADDRESS;
-// Base Sepolia Aave V3 pool — matches the vault whitelist deployed on Base Sepolia
+// Base Sepolia Aave V3 pool — matches the vault's deployed whitelist
 const AAVE_POOL       = "0x8bAB6d1b75f19e9eD9fCe8b9BD338844fF79aE27";
-const USDC            = "0xba50Cd2A20f6DA35D788639E581bca8d0B5d4D5f"; // USDC on this Base Sepolia Aave pool
+// USDC used by this specific Aave V3 pool on Base Sepolia (NOT Circle's bridged USDC)
+const USDC            = "0xba50Cd2A20f6DA35D788639E581bca8d0B5d4D5f";
+// aUSDC — the receipt token minted by Aave when USDC is supplied; vault must hold this to withdraw
+const A_USDC          = "0x10F1A9D11CDf50041f3f8cB7191CBE2f31750ACC";
+
+// Spend cap demo uses an amount that clearly exceeds the on-chain maxTxAmount
+// The vault's current maxTxAmount is 1000 USDC; 2000 will always trigger the cap
+const DEMO_EXCEED_AMOUNT = 2000;
 
 const account       = privateKeyToAccount(process.env.PRIVATE_KEY);
 const transport     = http(process.env.BASE_SEPOLIA_RPC_URL);
@@ -25,6 +32,9 @@ const walletClient  = createWalletClient({ account, chain: baseSepolia, transpor
 // ── ABIs ──────────────────────────────────────────────────────────────────────
 const VAULT_ABI = parseAbi([
   "function execute(address target, uint256 amount, bytes calldata callData) external returns (bytes memory)",
+  "function setAllowedProtocols(address[] calldata protocols) external",
+  "function getAllowedProtocols() external view returns (address[])",
+  "function getPolicy() external view returns (address,bool,uint256,uint256,uint256,int256,uint256,address[])",
   "error Revoked()",
   "error TargetNotAllowed(address target)",
   "error AmountExceedsLimit(uint256 requested, uint256 limit)",
@@ -41,11 +51,26 @@ const AAVE_ABI = parseAbi([
   "function withdraw(address,uint256,address) external returns (uint256)",
 ]);
 
+const ERC20_ABI = parseAbi([
+  "function allowance(address owner, address spender) external view returns (uint256)",
+  "function balanceOf(address account) external view returns (uint256)",
+  "function approve(address spender, uint256 amount) external returns (bool)",
+]);
+
 // ── In-memory log ─────────────────────────────────────────────────────────────
 const actionLog = [];
 function logAction(entry) {
   actionLog.unshift({ ts: Date.now(), ...entry });
   if (actionLog.length > 100) actionLog.pop();
+}
+
+// ── Vault USDC / aUSDC balances ───────────────────────────────────────────────
+async function getVaultBalances() {
+  const [usdc, ausdc] = await Promise.all([
+    publicClient.readContract({ address: USDC,   abi: ERC20_ABI, functionName: "balanceOf", args: [VAULT_ADDRESS] }),
+    publicClient.readContract({ address: A_USDC, abi: ERC20_ABI, functionName: "balanceOf", args: [VAULT_ADDRESS] }),
+  ]);
+  return { usdcRaw: usdc, ausdcRaw: ausdc };
 }
 
 // ── Aave position ─────────────────────────────────────────────────────────────
@@ -64,34 +89,84 @@ async function getPosition(userAddress) {
   };
 }
 
+// ── One-time vault setup ──────────────────────────────────────────────────────
+// The deployer wallet is both owner and agent, so the agent can call owner-only
+// functions like setAllowedProtocols to self-configure.
+async function ensureSetup() {
+  try {
+    // 1. Ensure USDC is in the vault's protocol whitelist so the agent can
+    //    call approve() on the USDC token through execute() before supplying.
+    const protocols = await publicClient.readContract({
+      address: VAULT_ADDRESS, abi: VAULT_ABI,
+      functionName: "getAllowedProtocols",
+    });
+
+    const hasUsdc = protocols.some(p => p.toLowerCase() === USDC.toLowerCase());
+    if (!hasUsdc) {
+      console.log("[setup] Adding USDC to vault whitelist…");
+      const aaveAlreadyIn = protocols.some(p => p.toLowerCase() === AAVE_POOL.toLowerCase());
+      const newList = aaveAlreadyIn
+        ? [...protocols, USDC]
+        : [AAVE_POOL, USDC];
+      const hash = await walletClient.writeContract({
+        address: VAULT_ADDRESS, abi: VAULT_ABI,
+        functionName: "setAllowedProtocols",
+        args: [newList],
+      });
+      await publicClient.waitForTransactionReceipt({ hash, confirmations: 1 });
+      console.log("[setup] USDC added to whitelist");
+    }
+
+    // 2. Ensure the vault has approved Aave pool to spend its USDC.
+    //    Without this, supply() calls always fail with ERC-20 transfer errors.
+    const allowance = await publicClient.readContract({
+      address: USDC, abi: ERC20_ABI,
+      functionName: "allowance",
+      args: [VAULT_ADDRESS, AAVE_POOL],
+    });
+
+    if (allowance === 0n) {
+      console.log("[setup] Approving Aave pool to spend vault's USDC…");
+      const approveCallData = encodeFunctionData({
+        abi: ERC20_ABI, functionName: "approve",
+        args: [AAVE_POOL, maxUint256],
+      });
+      await walletClient.writeContract({
+        address: VAULT_ADDRESS, abi: VAULT_ABI,
+        functionName: "execute",
+        args: [USDC, 0n, approveCallData],
+      });
+      console.log("[setup] USDC approved for Aave pool");
+    }
+  } catch (err) {
+    // Non-fatal: vault may not be funded yet; setup can be retried on next run
+    console.warn("[setup] Setup step skipped:", err.message?.slice(0, 120));
+  }
+}
+
 // ── Claude: decide what the agent should do ───────────────────────────────────
 async function askClaude(position, aggressive = false) {
+  // Demo mode: always use the hardcoded large amount so the spend cap is reliably triggered.
+  // Claude's decision is not relevant here — we just need to exceed maxTxAmount.
+  if (aggressive) return { action: "withdraw", amount: DEMO_EXCEED_AMOUNT, reason: `Aggressive rebalance — attempting to withdraw $${DEMO_EXCEED_AMOUNT} USDC to demonstrate the spend cap firewall.` };
+
   if (!anthropic) {
-    if (aggressive) return { action: "withdraw", amount: 750, reason: "Rebalancing portfolio — withdrawing 750 USDC to capture external yield opportunity." };
-    if (position.healthFactor < 1.5) return { action: "supply", amount: 300, reason: "EMERGENCY: health factor critically low — supplying collateral to avoid liquidation." };
-    if (position.healthFactor < 1.8) return { action: "supply", amount: 150, reason: "Health factor below safe threshold — adding collateral." };
+    if (position.healthFactor !== null && position.healthFactor < 1.5) return { action: "supply", amount: 300, reason: "EMERGENCY: health factor critically low — supplying collateral to avoid liquidation." };
+    if (position.healthFactor !== null && position.healthFactor < 1.8) return { action: "supply", amount: 150, reason: "Health factor below safe threshold — adding collateral." };
     return { action: "withdraw", amount: 150, reason: "Health factor strong — withdrawing 150 USDC to rebalance liquidity." };
   }
 
-  const prompt = aggressive
-    ? `You are an autonomous AI DeFi agent. The portfolio is healthy and you decide to rebalance aggressively.
 
-Current Aave position:
-- Collateral: $${position.totalCollateralUSD.toFixed(2)}
-- Debt: $${position.totalDebtUSD.toFixed(2)}
-- Health Factor: ${position.healthFactor.toFixed(4)}
 
-You want to withdraw USDC from Aave to capture a yield opportunity elsewhere. Choose an amount between 600 and 900 USDC.
+  const hfDisplay = position.healthFactor !== null ? position.healthFactor.toFixed(4) : "N/A";
 
-Reply with JSON only: { "action": "withdraw", "amount": <number between 600-900>, "reason": "<your investment reasoning in one sentence>" }`
-
-    : position.healthFactor < 1.5
+  const prompt = position.healthFactor !== null && position.healthFactor < 1.5
     ? `You are an autonomous AI DeFi agent. This is an EMERGENCY.
 
 Current Aave position:
 - Collateral: $${position.totalCollateralUSD.toFixed(2)}
 - Debt: $${position.totalDebtUSD.toFixed(2)}
-- Health Factor: ${position.healthFactor.toFixed(4)} ← CRITICALLY LOW (liquidation at 1.0)
+- Health Factor: ${hfDisplay} ← CRITICALLY LOW (liquidation at 1.0)
 
 The health factor is dangerously close to liquidation. You must immediately supply collateral to rescue the position before it gets liquidated.
 
@@ -102,7 +177,7 @@ Reply with JSON only: { "action": "supply", "amount": <number between 100-400>, 
 Current position:
 - Collateral: $${position.totalCollateralUSD.toFixed(2)}
 - Debt: $${position.totalDebtUSD.toFixed(2)}
-- Health Factor: ${position.healthFactor.toFixed(4)}
+- Health Factor: ${hfDisplay}
 - Available to borrow: $${position.availableBorrowsUSD.toFixed(2)}
 
 Your job is to actively manage this portfolio. You must always take an action — either supply more collateral or withdraw some USDC to rebalance.
@@ -118,7 +193,6 @@ Reply with JSON only: { "action": "supply"|"withdraw", "amount": <number>, "reas
     messages: [{ role: "user", content: prompt }],
   });
   const text = resp.content[0]?.text ?? "";
-  // Claude sometimes returns multiple JSON blocks — take the last valid one with an action field
   const matches = [...text.matchAll(/\{[^{}]+\}/g)];
   for (const m of matches.reverse()) {
     try {
@@ -130,31 +204,39 @@ Reply with JSON only: { "action": "supply"|"withdraw", "amount": <number>, "reas
 }
 
 // ── Execute decision through PolicyVault ──────────────────────────────────────
-async function submitAction(decision, userAddress) {
+async function submitAction(decision, userAddress, aggressive = false) {
   if (decision.action === "none") return null;
 
-  const onBehalfOf = userAddress || FALLBACK_OWNER;
-  const amountRaw  = BigInt(Math.floor((decision.amount ?? 0) * 1e6));
-  const callData   = decision.action === "supply"
-    ? encodeFunctionData({ abi: AAVE_ABI, functionName: "supply",   args: [USDC, amountRaw, onBehalfOf, 0] })
-    : encodeFunctionData({ abi: AAVE_ABI, functionName: "withdraw", args: [USDC, amountRaw, onBehalfOf] });
-  const target = AAVE_POOL;
+  const amountRaw = BigInt(Math.floor((decision.amount ?? 0) * 1e6));
+
+  // For the spend cap demo, pass the USDC amount as the vault's `amount` parameter
+  // so the vault's spend cap check fires before the Aave call.
+  // For regular runs, pass 0 — Aave's supply/withdraw are not payable functions and
+  // will revert if any ETH value is forwarded (even a tiny amount in wei).
+  const vaultAmount = aggressive ? amountRaw : 0n;
+
+  // Supply: vault holds USDC and gets aUSDC back (onBehalfOf = vault so vault can later withdraw)
+  // Withdraw: vault burns its aUSDC and sends underlying USDC to the owner
+  const callData = decision.action === "supply"
+    ? encodeFunctionData({ abi: AAVE_ABI, functionName: "supply",   args: [USDC, amountRaw, VAULT_ADDRESS, 0] })
+    : encodeFunctionData({ abi: AAVE_ABI, functionName: "withdraw", args: [USDC, amountRaw, userAddress || FALLBACK_OWNER] });
 
   return walletClient.writeContract({
     address: VAULT_ADDRESS, abi: VAULT_ABI,
-    functionName: "execute", args: [target, amountRaw, callData],
+    functionName: "execute", args: [AAVE_POOL, vaultAmount, callData],
   });
 }
 
 // ── Parse vault revert → human reason ────────────────────────────────────────
-function parseBlockReason(err, decision) {
+function parseBlockReason(err, decision, maxTxAmount) {
   const amt      = decision?.amount ?? "?";
   const act      = decision?.action ?? "action";
   const errName  = err?.cause?.data?.errorName ?? err?.name ?? "";
   const errMsg   = err?.message ?? "";
+  const capUsdc  = maxTxAmount ? Number(maxTxAmount) / 1e6 : "?";
 
   if (errName === "AmountExceedsLimit" || errMsg.includes("AmountExceedsLimit")) {
-    return { rule: "SpendCap",     reason: `Agent tried to ${act} $${amt} USDC — exceeds your ${500} USDC per-transaction spend cap.` };
+    return { rule: "SpendCap",     reason: `Agent tried to ${act} $${amt} USDC — exceeds your ${capUsdc} USDC per-transaction spend cap.` };
   }
   if (errName === "Revoked" || errMsg.includes("Revoked")) {
     return { rule: "KillSwitch",   reason: "Agent is emergency-revoked. All transactions blocked until reinstated." };
@@ -172,16 +254,30 @@ function parseBlockReason(err, decision) {
     return { rule: "PriceFloor",   reason: "ETH price is below your Chainlink price floor — no selling allowed." };
   }
   if (errName === "CallFailed" || errMsg.includes("CallFailed")) {
-    return { rule: "CallFailed",   reason: `Aave call failed — vault may need USDC balance to ${act}.` };
+    return { rule: "CallFailed",   reason: `Aave call failed — vault needs USDC balance to ${act}. Fund the vault at ${VAULT_ADDRESS} with USDC on Base Sepolia.` };
   }
   return { rule: "PolicyVault",    reason: `Transaction blocked by PolicyVault (${errName || "unknown error"}).` };
 }
 
 // ── Main agent cycle ──────────────────────────────────────────────────────────
+let cachedMaxTxAmount = null;
+
 async function runCycle(aggressive = false, userAddress = null) {
   let decision = null;
   try {
-    const position = await getPosition(userAddress);
+    // Cache the spend cap so error messages show the correct value
+    if (!cachedMaxTxAmount) {
+      const policy = await publicClient.readContract({
+        address: VAULT_ADDRESS, abi: VAULT_ABI,
+        functionName: "getPolicy",
+      });
+      cachedMaxTxAmount = policy[2];
+    }
+
+    const [position, vaultBal] = await Promise.all([getPosition(userAddress), getVaultBalances()]);
+    const vaultUsdcUsdc  = Number(vaultBal.usdcRaw)  / 1e6; // vault USDC available to supply
+    const vaultAusdcUsdc = Number(vaultBal.ausdcRaw) / 1e6; // vault aUSDC available to withdraw
+
     decision = await askClaude(position, aggressive);
 
     if (!decision.action || decision.action === "none") {
@@ -190,13 +286,37 @@ async function runCycle(aggressive = false, userAddress = null) {
       return entry;
     }
 
-    const hash = await submitAction(decision, userAddress);
+    // Cap the action to what the vault can actually execute.
+    // Skip for demo (aggressive) mode — demo always hits the spend cap before reaching Aave.
+    if (!aggressive && decision.action === "withdraw" && vaultAusdcUsdc < 1) {
+      if (vaultUsdcUsdc >= 50) {
+        // Vault has no aUSDC to withdraw; flip to supply instead so the vault builds a position
+        decision = { action: "supply", amount: Math.min(decision.amount, vaultUsdcUsdc), reason: "Vault has no aUSDC to withdraw — supplying USDC to Aave first to build the vault's position." };
+      } else {
+        const entry = { status: "idle", reason: "Vault has no aUSDC to withdraw and no USDC to supply — fund the vault first.", decision };
+        logAction(entry);
+        return entry;
+      }
+    } else if (!aggressive && decision.action === "withdraw") {
+      // Cap withdrawal to what the vault actually holds
+      decision = { ...decision, amount: Math.min(decision.amount, Math.floor(vaultAusdcUsdc)) };
+    } else if (!aggressive && decision.action === "supply" && vaultUsdcUsdc < decision.amount) {
+      if (vaultUsdcUsdc >= 50) {
+        decision = { ...decision, amount: Math.floor(vaultUsdcUsdc), reason: decision.reason + ` (capped to vault's ${Math.floor(vaultUsdcUsdc)} USDC balance)` };
+      } else {
+        const entry = { status: "idle", reason: "Vault USDC balance too low to supply — fund the vault.", decision };
+        logAction(entry);
+        return entry;
+      }
+    }
+
+    const hash = await submitAction(decision, userAddress, aggressive);
     const entry = { status: "allowed", decision, hash: hash ?? null };
     logAction(entry);
     return entry;
 
   } catch (err) {
-    const { rule, reason } = parseBlockReason(err, decision);
+    const { rule, reason } = parseBlockReason(err, decision, cachedMaxTxAmount);
     const entry = { status: "blocked", rule, reason, decision };
     logAction(entry);
     return entry;
@@ -213,13 +333,39 @@ app.get("/log",       (_, res) => res.json(actionLog));
 app.post("/run",      async (req, res) => res.json(await runCycle(false, req.body?.address)));
 app.post("/run-demo", async (req, res) => res.json(await runCycle(true,  req.body?.address)));
 
+// ── Vault info endpoint (for frontend diagnostics) ────────────────────────────
+app.get("/vault-info", async (req, res) => {
+  try {
+    const [policy, usdcBalance, ausdcBalance, usdcAllowance] = await Promise.all([
+      publicClient.readContract({ address: VAULT_ADDRESS, abi: VAULT_ABI, functionName: "getPolicy" }),
+      publicClient.readContract({ address: USDC,   abi: ERC20_ABI, functionName: "balanceOf", args: [VAULT_ADDRESS] }),
+      publicClient.readContract({ address: A_USDC, abi: ERC20_ABI, functionName: "balanceOf", args: [VAULT_ADDRESS] }),
+      publicClient.readContract({ address: USDC,   abi: ERC20_ABI, functionName: "allowance", args: [VAULT_ADDRESS, AAVE_POOL] }),
+    ]);
+    res.json({
+      vaultAddress:  VAULT_ADDRESS,
+      usdcBalance:   Number(usdcBalance)  / 1e6,
+      ausdcBalance:  Number(ausdcBalance) / 1e6,
+      usdcApproved:  usdcAllowance > 0n,
+      protocols:     policy[7],
+      maxTxUsdc:     Number(policy[2]) / 1e6,
+      cooldownSeconds: Number(policy[3]),
+    });
+  } catch (e) {
+    res.json({ error: e.message });
+  }
+});
+
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`[agent] listening on :${PORT}`));
+app.listen(PORT, () => {
+  console.log(`[agent] listening on :${PORT}`);
+  // Run one-time vault setup after the server is ready
+  ensureSetup().catch(e => console.warn("[setup] failed:", e.message?.slice(0, 80)));
+});
 
 // ── Background monitor ────────────────────────────────────────────────────────
 // Checks position every 60s. If HF drops below 1.5, logs an alert in the
-// action feed so the owner is notified. Does NOT attempt a supply transaction
-// because the vault has no USDC to supply — that would silently fail on-chain.
+// action feed so the owner is notified.
 let lastAlertTs = 0;
 
 async function monitor() {
@@ -227,9 +373,8 @@ async function monitor() {
     const position = await getPosition(FALLBACK_OWNER);
     const hf = position.healthFactor;
 
-    if (hf < 1.5) {
+    if (hf !== null && hf < 1.5) {
       const now = Date.now();
-      // Alert at most once every 2 minutes to avoid flooding the feed
       if (now - lastAlertTs > 120_000) {
         lastAlertTs = now;
         console.log(`[monitor] ALERT — HF ${hf.toFixed(4)} below threshold`);
@@ -246,4 +391,4 @@ async function monitor() {
   }
 }
 
-setInterval(monitor, 60_000); // check every 60 seconds
+setInterval(monitor, 60_000);

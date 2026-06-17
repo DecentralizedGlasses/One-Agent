@@ -82,6 +82,12 @@ export default function ActionFeed({ agentRevoked = false, onLog }) {
         </div>
       )}
 
+      {!agentRevoked && log.length > 0 && log[0]?.rule === "CallFailed" && (
+        <div className="mb-3 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
+          <span className="font-semibold">Vault needs USDC.</span> Send USDC on Base Sepolia to the vault address to enable agent actions.
+        </div>
+      )}
+
       {/* Demo result banner */}
       {demoResult && (
         <div className={`mb-3 px-3 py-2 rounded-xl text-xs font-medium border ${
