@@ -45,7 +45,6 @@ export default function PolicyPanel() {
 
   const CACHE_KEY = "one-agent-policy";
 
-  // When chain data arrives, persist it to localStorage
   useEffect(() => {
     if (!policy) return;
     const cached = {
@@ -57,13 +56,11 @@ export default function PolicyPanel() {
     localStorage.setItem(CACHE_KEY, JSON.stringify(cached));
   }, [policy]);
 
-  // On first render, load from localStorage while chain read is in flight
   const cached = (() => {
     try { return JSON.parse(localStorage.getItem(CACHE_KEY) ?? "null"); }
     catch { return null; }
   })();
 
-  // Priority: optimistic (just saved) > chain > localStorage cache > null
   const curMax   = optimistic?.maxTx      ?? (policy ? (Number(policy[2]) / 1e6).toFixed(0)  : cached?.maxTx      ?? null);
   const curCd    = optimistic?.cooldown   ?? (policy ? (Number(policy[3]) / 60).toFixed(0)   : cached?.cooldown   ?? null);
   const curHf    = optimistic?.hfFloor    ?? (policy ? (Number(policy[4]) / 1e18).toFixed(2) : cached?.hfFloor    ?? null);
@@ -88,31 +85,31 @@ export default function PolicyPanel() {
 
   const rules = [
     {
-      icon: "$", iconBg: "bg-blue-100",
+      icon: "$", iconBg: "bg-blue-100 dark:bg-blue-900",
       label: "Max spend per tx",
       display: curMax ? `${curMax} USDC limit` : "—",
       editKey: "maxTx", state: maxTx, set: setMaxTx, placeholder: curMax ?? "500", step: "1", suffix: "USDC",
     },
     {
-      icon: "▽", iconBg: "bg-green-100",
+      icon: "▽", iconBg: "bg-green-100 dark:bg-green-900",
       label: "Aave only",
       display: "Other protocols blocked",
       editKey: null,
     },
     {
-      icon: "⏱", iconBg: "bg-amber-100",
+      icon: "⏱", iconBg: "bg-amber-100 dark:bg-amber-900",
       label: "Time-lock",
       display: curCd ? `Once per ${curCd} minutes` : "—",
       editKey: "cooldown", state: cooldown, set: setCooldown, placeholder: curCd ?? "30", step: "1", suffix: "minutes",
     },
     {
-      icon: "모", iconBg: "bg-red-100",
+      icon: "모", iconBg: "bg-red-100 dark:bg-red-900",
       label: "Auto-kill threshold",
       display: curHf ? `Trigger if health < ${curHf}` : "—",
       editKey: "hfFloor", state: hfFloor, set: setHfFloor, placeholder: curHf ?? "1.50", step: "0.01", suffix: "",
     },
     {
-      icon: "$", iconBg: "bg-purple-100",
+      icon: "$", iconBg: "bg-purple-100 dark:bg-purple-900",
       label: "ETH price floor",
       display: curPrice ? `Block if ETH < $${curPrice}` : "—",
       editKey: "priceFloor", state: priceFloor, set: setPriceFloor, placeholder: curPrice ?? "1500", step: "1", suffix: "USD",
@@ -120,37 +117,33 @@ export default function PolicyPanel() {
   ];
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 p-5">
+    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 p-5">
       {/* Header */}
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-2">
           <span className="text-lg">☰</span>
-          <h2 className="text-base font-semibold text-gray-900">Policy rules</h2>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-slate-100">Policy rules</h2>
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => { setEditing(!editing); setMaxTx(""); setCooldown(""); setHfFloor(""); setPriceFloor(""); }}
-            className="text-xs text-blue-600 hover:text-blue-500 font-medium"
-          >
-            {editing ? "Cancel" : "Edit rules"}
-          </button>
-        </div>
+        <button
+          onClick={() => { setEditing(!editing); setMaxTx(""); setCooldown(""); setHfFloor(""); setPriceFloor(""); }}
+          className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 font-medium"
+        >
+          {editing ? "Cancel" : "Edit rules"}
+        </button>
       </div>
 
-      <p className="text-xs text-gray-400 mb-4">
+      <p className="text-xs text-gray-400 dark:text-slate-500 mb-4">
         {policy ? "Live from chain · enforced on every agent transaction" : "Connect wallet to load rules"}
       </p>
 
-      {/* Success banner */}
       {showBanner && (
-        <div className="mb-4 flex items-center gap-2 p-3 rounded-xl bg-green-50 border border-green-200">
-          <span className="text-green-600 font-bold">✓</span>
-          <p className="text-xs text-green-800 font-medium">Policy saved — new rules are enforced on-chain from now.</p>
+        <div className="mb-4 flex items-center gap-2 p-3 rounded-xl bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
+          <span className="text-green-600 dark:text-green-400 font-bold">✓</span>
+          <p className="text-xs text-green-800 dark:text-green-300 font-medium">Policy saved — new rules are enforced on-chain from now.</p>
         </div>
       )}
 
-      {/* Rules list */}
-      <div className="divide-y divide-gray-100">
+      <div className="divide-y divide-gray-100 dark:divide-slate-700">
         {rules.map((rule) => (
           <div key={rule.label} className="flex items-center gap-3 py-3">
             <div className={`w-9 h-9 rounded-xl ${rule.iconBg} flex items-center justify-center text-sm flex-shrink-0 font-semibold`}>
@@ -158,7 +151,7 @@ export default function PolicyPanel() {
             </div>
 
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900">{rule.label}</p>
+              <p className="text-sm font-medium text-gray-900 dark:text-slate-100">{rule.label}</p>
               {editing && rule.editKey ? (
                 <div className="mt-1.5 flex items-center gap-1.5">
                   <input
@@ -166,12 +159,12 @@ export default function PolicyPanel() {
                     value={rule.state}
                     onChange={e => rule.set(e.target.value)}
                     placeholder={rule.placeholder}
-                    className="w-28 text-xs bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-gray-900 focus:outline-none focus:border-blue-400"
+                    className="w-28 text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg px-2 py-1 text-gray-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-400 dark:focus:border-blue-500"
                   />
-                  {rule.suffix && <span className="text-xs text-gray-400">{rule.suffix}</span>}
+                  {rule.suffix && <span className="text-xs text-gray-400 dark:text-slate-500">{rule.suffix}</span>}
                 </div>
               ) : (
-                <p className={`text-xs mt-0.5 font-medium ${rule.display === "—" ? "text-gray-300" : "text-gray-500"}`}>
+                <p className={`text-xs mt-0.5 font-medium ${rule.display === "—" ? "text-gray-300 dark:text-slate-600" : "text-gray-500 dark:text-slate-400"}`}>
                   {rule.display}
                 </p>
               )}
@@ -180,7 +173,6 @@ export default function PolicyPanel() {
         ))}
       </div>
 
-      {/* Save button */}
       {editing && (
         <button
           onClick={savePolicy}
@@ -193,4 +185,3 @@ export default function PolicyPanel() {
     </div>
   );
 }
-

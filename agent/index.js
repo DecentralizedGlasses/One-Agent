@@ -73,11 +73,10 @@ async function getVaultBalances() {
 }
 
 // ── Aave position ─────────────────────────────────────────────────────────────
-async function getPosition(userAddress) {
-  const addr = userAddress || FALLBACK_OWNER;
+async function getPosition() {
   const [col, debt, borrows, , , hf] = await publicClient.readContract({
     address: AAVE_POOL, abi: AAVE_ABI,
-    functionName: "getUserAccountData", args: [addr],
+    functionName: "getUserAccountData", args: [VAULT_ADDRESS],
   });
   const MAX = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
   return {
@@ -206,7 +205,7 @@ Reply with JSON only: { "action": "supply"|"withdraw", "amount": <number>, "reas
 }
 
 // ── Execute decision through PolicyVault ──────────────────────────────────────
-async function submitAction(decision, userAddress, aggressive = false) {
+async function submitAction(decision, aggressive = false) {
   if (decision.action === "none") return null;
 
   const amountRaw = BigInt(Math.floor((decision.amount ?? 0) * 1e6));
@@ -218,10 +217,10 @@ async function submitAction(decision, userAddress, aggressive = false) {
   const vaultAmount = aggressive ? amountRaw : 0n;
 
   // Supply: vault holds USDC and gets aUSDC back (onBehalfOf = vault so vault can later withdraw)
-  // Withdraw: vault burns its aUSDC and sends underlying USDC to the owner
+  // Withdraw: vault burns vault's aUSDC and sends underlying USDC to the owner wallet
   const callData = decision.action === "supply"
     ? encodeFunctionData({ abi: AAVE_ABI, functionName: "supply",   args: [USDC, amountRaw, VAULT_ADDRESS, 0] })
-    : encodeFunctionData({ abi: AAVE_ABI, functionName: "withdraw", args: [USDC, amountRaw, userAddress || FALLBACK_OWNER] });
+    : encodeFunctionData({ abi: AAVE_ABI, functionName: "withdraw", args: [USDC, amountRaw, FALLBACK_OWNER] });
 
   return walletClient.writeContract({
     address: VAULT_ADDRESS, abi: VAULT_ABI,
@@ -262,14 +261,14 @@ function parseBlockReason(err, decision, maxTxAmount) {
 }
 
 // ── Main agent cycle ──────────────────────────────────────────────────────────
-async function runCycle(aggressive = false, userAddress = null) {
+async function runCycle(aggressive = false) {
   let decision = null;
   let maxTxAmount = null;
   try {
     // Read live policy on every cycle so error messages reflect the current on-chain limit
     const [policy, position, vaultBal] = await Promise.all([
       publicClient.readContract({ address: VAULT_ADDRESS, abi: VAULT_ABI, functionName: "getPolicy" }),
-      getPosition(userAddress),
+      getPosition(),
       getVaultBalances(),
     ]);
     maxTxAmount = policy[2];
@@ -278,8 +277,20 @@ async function runCycle(aggressive = false, userAddress = null) {
 
     decision = await askClaude(position, aggressive, maxTxAmount);
 
+    // Snapshot captured before any mutation — stored in every log entry
+    const snapshot = {
+      vaultUsdc:    vaultUsdcUsdc,
+      vaultAusdc:   vaultAusdcUsdc,
+      healthFactor: position.healthFactor,
+      collateralUSD: position.totalCollateralUSD,
+      debtUSD:       position.totalDebtUSD,
+      maxTxUsdc:     Number(maxTxAmount) / 1e6,
+      cooldownSec:   Number(policy[3]),
+      isRevoked:     policy[1],
+    };
+
     if (!decision.action || decision.action === "none") {
-      const entry = { status: "idle", reason: "Agent scanned position — no action needed", decision };
+      const entry = { status: "idle", reason: "Agent scanned position — no action needed", decision, ...snapshot };
       logAction(entry);
       return entry;
     }
@@ -291,7 +302,7 @@ async function runCycle(aggressive = false, userAddress = null) {
         // Vault has no aUSDC to withdraw; flip to supply instead so the vault builds a position
         decision = { action: "supply", amount: Math.min(decision.amount, vaultUsdcUsdc), reason: "Vault has no aUSDC to withdraw — supplying USDC to Aave first to build the vault's position." };
       } else {
-        const entry = { status: "idle", reason: "Vault has no aUSDC to withdraw and no USDC to supply — fund the vault first.", decision };
+        const entry = { status: "idle", reason: "Vault has no aUSDC to withdraw and no USDC to supply — fund the vault first.", decision, ...snapshot };
         logAction(entry);
         return entry;
       }
@@ -302,20 +313,26 @@ async function runCycle(aggressive = false, userAddress = null) {
       if (vaultUsdcUsdc >= 50) {
         decision = { ...decision, amount: Math.floor(vaultUsdcUsdc), reason: decision.reason + ` (capped to vault's ${Math.floor(vaultUsdcUsdc)} USDC balance)` };
       } else {
-        const entry = { status: "idle", reason: "Vault USDC balance too low to supply — fund the vault.", decision };
+        const entry = { status: "idle", reason: "Vault USDC balance too low to supply — fund the vault.", decision, ...snapshot };
         logAction(entry);
         return entry;
       }
     }
 
-    const hash = await submitAction(decision, userAddress, aggressive);
-    const entry = { status: "allowed", decision, hash: hash ?? null };
+    const hash = await submitAction(decision, aggressive);
+    const entry = { status: "allowed", decision, hash: hash ?? null, ...snapshot };
     logAction(entry);
     return entry;
 
   } catch (err) {
     const { rule, reason } = parseBlockReason(err, decision, maxTxAmount);
-    const entry = { status: "blocked", rule, reason, decision };
+    const snapshot = {
+      healthFactor:  null,
+      collateralUSD: null,
+      debtUSD:       null,
+      maxTxUsdc:     maxTxAmount ? Number(maxTxAmount) / 1e6 : null,
+    };
+    const entry = { status: "blocked", rule, reason, decision, ...snapshot };
     logAction(entry);
     return entry;
   }
@@ -326,10 +343,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.get("/position",  async (req, res) => res.json(await getPosition(req.query.address).catch(e => ({ error: e.message }))));
+app.get("/position",  async (req, res) => res.json(await getPosition().catch(e => ({ error: e.message }))));
 app.get("/log",       (_, res) => res.json(actionLog));
-app.post("/run",      async (req, res) => res.json(await runCycle(false, req.body?.address)));
-app.post("/run-demo", async (req, res) => res.json(await runCycle(true,  req.body?.address)));
+app.post("/run",      async (req, res) => res.json(await runCycle(false)));
+app.post("/run-demo", async (req, res) => res.json(await runCycle(true)));
 
 // ── Vault info endpoint (for frontend diagnostics) ────────────────────────────
 app.get("/vault-info", async (req, res) => {
@@ -368,7 +385,7 @@ let lastAlertTs = 0;
 
 async function monitor() {
   try {
-    const position = await getPosition(FALLBACK_OWNER);
+    const position = await getPosition();
     const hf = position.healthFactor;
 
     if (hf !== null && hf < 1.5) {
