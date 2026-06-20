@@ -3,8 +3,9 @@ import { useEffect, useState } from "react";
 const AGENT_URL = import.meta.env.VITE_AGENT_URL || "http://localhost:3001";
 
 export default function StatsRow({ position, log }) {
-  const today = new Date().setHours(0, 0, 0, 0);
+  const today        = new Date().setHours(0, 0, 0, 0);
   const todayLog     = log.filter(e => e.ts >= today);
+  const actionsToday = todayLog.length;
   const blockedToday = todayLog.filter(e => e.status === "blocked").length;
 
   const hf      = position?.healthFactor ?? null;
@@ -35,7 +36,7 @@ export default function StatsRow({ position, log }) {
   const vaultUsdcColor = vaultUsdc === null ? "text-gray-400 dark:text-slate-500" : vaultUsdc > 0 ? "text-green-700 dark:text-green-400" : "text-red-500 dark:text-red-400";
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
       <StatCard
         label="Total supplied"
         value={position ? `$${position.totalCollateralUSD.toLocaleString("en-US", { maximumFractionDigits: 0 })}` : "—"}
@@ -47,6 +48,11 @@ export default function StatsRow({ position, log }) {
         value={vaultUsdcStr}
         valueClass={vaultUsdcColor}
         sub={vaultUsdc === 0 ? "fund to enable agent" : undefined}
+      />
+      <StatCard
+        label="Actions today"
+        value={actionsToday}
+        valueClass="text-indigo-600 dark:text-indigo-400"
       />
       <StatCard
         label="Blocked today"

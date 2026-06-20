@@ -8,6 +8,7 @@ import PositionCard    from "./components/PositionCard";
 import PolicyPanel     from "./components/PolicyPanel";
 import ActionFeed      from "./components/ActionFeed";
 import EthPriceTarget  from "./components/EthPriceTarget";
+import FundVault       from "./components/FundVault";
 import useDarkMode     from "./hooks/useDarkMode";
 
 export default function App() {
@@ -75,6 +76,7 @@ export default function App() {
           <div className="space-y-4">
             <PositionCard onPosition={setPosition} />
             <PolicyPanel />
+            <FundVault />
             <EthPriceTarget />
           </div>
           <ActionFeed agentRevoked={agentRevoked} onLog={setLog} />
