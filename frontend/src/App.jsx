@@ -2,12 +2,13 @@ import { useState } from "react";
 import { useAccount, useConnect, useReadContract } from "wagmi";
 import { injected } from "wagmi/connectors";
 import { VAULT_ADDRESS, VAULT_ABI, VAULT_CHAIN_ID } from "./wagmi";
-import Header       from "./components/Header";
-import StatsRow     from "./components/StatsRow";
-import PositionCard from "./components/PositionCard";
-import PolicyPanel  from "./components/PolicyPanel";
-import ActionFeed   from "./components/ActionFeed";
-import useDarkMode  from "./hooks/useDarkMode";
+import Header          from "./components/Header";
+import StatsRow        from "./components/StatsRow";
+import PositionCard    from "./components/PositionCard";
+import PolicyPanel     from "./components/PolicyPanel";
+import ActionFeed      from "./components/ActionFeed";
+import EthPriceTarget  from "./components/EthPriceTarget";
+import useDarkMode     from "./hooks/useDarkMode";
 
 export default function App() {
   const [optimisticRevoked, setOptimisticRevoked] = useState(null);
@@ -74,6 +75,7 @@ export default function App() {
           <div className="space-y-4">
             <PositionCard onPosition={setPosition} />
             <PolicyPanel />
+            <EthPriceTarget />
           </div>
           <ActionFeed agentRevoked={agentRevoked} onLog={setLog} />
         </div>

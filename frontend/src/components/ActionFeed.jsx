@@ -161,9 +161,10 @@ function FeedEntry({ entry, expanded, onToggle }) {
 
 function DetailReport({ entry }) {
   const ts        = entry.ts ? new Date(entry.ts).toLocaleString() : "—";
-  const isBlocked = entry.status === "blocked";
-  const isAllowed = entry.status === "allowed";
-  const isAlert   = entry.status === "alert";
+  const isBlocked  = entry.status === "blocked";
+  const isAllowed  = entry.status === "allowed";
+  const isAlert    = entry.status === "alert";
+  const isSellHit  = entry.status === "sell_triggered";
 
   return (
     <div className="mb-3 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 text-xs overflow-hidden divide-y divide-gray-200 dark:divide-slate-700">
@@ -238,6 +239,36 @@ function DetailReport({ entry }) {
       {isAlert && (
         <Section title="Monitor alert detail">
           <p className="text-orange-700 dark:text-orange-400 leading-relaxed">{entry.reason}</p>
+        </Section>
+      )}
+
+      {/* 5b. ETH sell trigger detail */}
+      {isSellHit && (
+        <Section title="ETH price target">
+          <SnapshotGrid>
+            <SnapshotCell
+              label="ETH price at trigger"
+              value={`$${entry.ethPrice?.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              valueColor="text-emerald-600 dark:text-emerald-400"
+            />
+            <SnapshotCell
+              label="Target price"
+              value={`$${entry.triggerPrice?.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            />
+            <SnapshotCell
+              label="Mode"
+              value={entry.mode === "percent" ? `+${entry.targetPct}% gain` : "Absolute price"}
+            />
+          </SnapshotGrid>
+          {entry.ethBalance > 0 && (
+            <div className="mt-2 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300">
+              Vault holds <span className="font-semibold">{entry.ethBalance?.toFixed(4)} ETH</span> worth{" "}
+              <span className="font-semibold">${entry.usdValue?.toLocaleString("en-US", { maximumFractionDigits: 2 })}</span> at trigger price.
+            </div>
+          )}
+          {entry.ethBalance === 0 && (
+            <p className="mt-2 text-gray-500 dark:text-slate-400">Vault holds no ETH. Send ETH to the vault address to enable automatic sells.</p>
+          )}
         </Section>
       )}
 
@@ -366,11 +397,12 @@ function Pill({ color, children }) {
 
 function StatusBadge({ entry }) {
   const map = {
-    allowed: { label: "Executed",   cls: "bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 border-green-200 dark:border-green-700"   },
-    blocked: { label: "Blocked",    cls: "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 border-red-200 dark:border-red-700"               },
-    idle:    { label: "No action",  cls: "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-700"         },
-    alert:   { label: "Alert",      cls: "bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-700"},
-    revoked: { label: "Revoked",    cls: "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 border-red-200 dark:border-red-700"               },
+    allowed:         { label: "Executed",      cls: "bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 border-green-200 dark:border-green-700"       },
+    blocked:         { label: "Blocked",       cls: "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 border-red-200 dark:border-red-700"                   },
+    idle:            { label: "No action",     cls: "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-700"             },
+    alert:           { label: "Alert",         cls: "bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-700" },
+    revoked:         { label: "Revoked",       cls: "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 border-red-200 dark:border-red-700"                   },
+    sell_triggered:  { label: "Sell triggered",cls: "bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-700" },
   };
   const { label, cls } = map[entry.status] ?? { label: entry.status, cls: "bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300 border-gray-200 dark:border-slate-600" };
   return <span className={`px-3 py-1 rounded-full font-bold border text-sm ${cls}`}>{label}</span>;
@@ -422,6 +454,14 @@ function formatEntry(entry) {
   }
   if (entry.status === "revoked") {
     return { dot: "bg-red-500", badge: "killed", badgeStyle: "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300", text: "Kill switch triggered — session revoked" };
+  }
+  if (entry.status === "sell_triggered") {
+    return {
+      dot: "bg-emerald-500",
+      badge: "sell triggered",
+      badgeStyle: "bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300",
+      text: `ETH hit $${entry.ethPrice?.toLocaleString("en-US", { maximumFractionDigits: 2 })} — price target reached`,
+    };
   }
   return { dot: "bg-gray-400", badge: null, badgeStyle: "", text: entry.reason ?? "Agent action" };
 }

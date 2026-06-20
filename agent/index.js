@@ -23,6 +23,9 @@ const A_USDC          = "0x10F1A9D11CDf50041f3f8cB7191CBE2f31750ACC";
 // Spend cap demo: multiplier applied to the live maxTxAmount to guarantee the cap fires
 const DEMO_EXCEED_MULTIPLIER = 2;
 
+// Chainlink ETH/USD price feed on Base Sepolia
+const CHAINLINK_ETH_USD = "0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1";
+
 const account       = privateKeyToAccount(process.env.PRIVATE_KEY);
 const transport     = http(process.env.BASE_SEPOLIA_RPC_URL);
 const publicClient  = createPublicClient({ chain: baseSepolia, transport });
@@ -56,12 +59,30 @@ const ERC20_ABI = parseAbi([
   "function approve(address spender, uint256 amount) external returns (bool)",
 ]);
 
+const CHAINLINK_ABI = parseAbi([
+  "function latestRoundData() external view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)",
+]);
+
 // ── In-memory log ─────────────────────────────────────────────────────────────
 const actionLog = [];
 function logAction(entry) {
   actionLog.unshift({ ts: Date.now(), ...entry });
   if (actionLog.length > 100) actionLog.pop();
 }
+
+// ── ETH price target state ────────────────────────────────────────────────────
+// mode "absolute": trigger when ETH/USD >= targetUSD
+// mode "percent":  trigger when ETH rises >= targetPct% above baselineUSD
+let priceTarget = {
+  enabled:        false,
+  mode:           "absolute", // "absolute" | "percent"
+  targetUSD:      null,
+  targetPct:      null,
+  baselineUSD:    null,  // ETH price at the moment the target was saved
+  triggered:      false,
+  triggeredAt:    null,
+  triggeredPrice: null,
+};
 
 // ── Vault USDC / aUSDC balances ───────────────────────────────────────────────
 async function getVaultBalances() {
@@ -70,6 +91,15 @@ async function getVaultBalances() {
     publicClient.readContract({ address: A_USDC, abi: ERC20_ABI, functionName: "balanceOf", args: [VAULT_ADDRESS] }),
   ]);
   return { usdcRaw: usdc, ausdcRaw: ausdc };
+}
+
+// ── ETH / USD price from Chainlink ───────────────────────────────────────────
+async function getEthPrice() {
+  const [, answer, , updatedAt] = await publicClient.readContract({
+    address: CHAINLINK_ETH_USD, abi: CHAINLINK_ABI,
+    functionName: "latestRoundData",
+  });
+  return { priceUSD: Number(answer) / 1e8, updatedAt: Number(updatedAt) };
 }
 
 // ── Aave position ─────────────────────────────────────────────────────────────
@@ -371,6 +401,48 @@ app.get("/vault-info", async (req, res) => {
   }
 });
 
+// ── ETH price + target endpoints ──────────────────────────────────────────────
+app.get("/eth-price", async (req, res) => {
+  try {
+    const data = await getEthPrice();
+    res.json(data);
+  } catch (e) {
+    res.json({ error: e.message });
+  }
+});
+
+app.get("/price-target", (req, res) => res.json(priceTarget));
+
+app.post("/price-target", async (req, res) => {
+  const { mode, targetUSD, targetPct, enabled } = req.body ?? {};
+  if (enabled === false) {
+    priceTarget = { ...priceTarget, enabled: false, triggered: false, triggeredAt: null, triggeredPrice: null };
+    return res.json(priceTarget);
+  }
+  try {
+    const { priceUSD } = await getEthPrice();
+    priceTarget = {
+      enabled:        true,
+      mode:           mode === "percent" ? "percent" : "absolute",
+      targetUSD:      mode === "absolute" ? Number(targetUSD) : null,
+      targetPct:      mode === "percent"  ? Number(targetPct) : null,
+      baselineUSD:    priceUSD,
+      triggered:      false,
+      triggeredAt:    null,
+      triggeredPrice: null,
+    };
+    console.log(`[price-target] Set: mode=${priceTarget.mode}, baseline=$${priceUSD.toFixed(2)}, target=${mode === "percent" ? `+${targetPct}%` : `$${targetUSD}`}`);
+    res.json(priceTarget);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/price-target/reset", (req, res) => {
+  priceTarget = { ...priceTarget, triggered: false, triggeredAt: null, triggeredPrice: null };
+  res.json(priceTarget);
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`[agent] listening on :${PORT}`);
@@ -385,9 +457,13 @@ let lastAlertTs = 0;
 
 async function monitor() {
   try {
-    const position = await getPosition();
-    const hf = position.healthFactor;
+    const [position, ethData] = await Promise.all([
+      getPosition(),
+      getEthPrice().catch(() => null),
+    ]);
 
+    // Health factor alert
+    const hf = position.healthFactor;
     if (hf !== null && hf < 1.5) {
       const now = Date.now();
       if (now - lastAlertTs > 120_000) {
@@ -398,6 +474,38 @@ async function monitor() {
           rule: "HealthFactor",
           reason: `Health factor dropped to ${hf.toFixed(4)} — below the safety threshold. Immediate owner action required to add collateral or reduce debt before liquidation.`,
           decision: { action: "alert", healthFactor: hf },
+        });
+      }
+    }
+
+    // ETH price target check
+    if (ethData && priceTarget.enabled && !priceTarget.triggered) {
+      const { priceUSD } = ethData;
+      const triggerPrice = priceTarget.mode === "percent"
+        ? priceTarget.baselineUSD * (1 + priceTarget.targetPct / 100)
+        : priceTarget.targetUSD;
+
+      if (priceUSD >= triggerPrice) {
+        priceTarget.triggered      = true;
+        priceTarget.triggeredAt    = Date.now();
+        priceTarget.triggeredPrice = priceUSD;
+
+        const ethBalance = await publicClient.getBalance({ address: VAULT_ADDRESS });
+        const ethAmount  = Number(ethBalance) / 1e18;
+        const usdValue   = ethAmount * priceUSD;
+
+        console.log(`[monitor] ETH price target hit — $${priceUSD.toFixed(2)} (target $${triggerPrice.toFixed(2)})`);
+        logAction({
+          status:        "sell_triggered",
+          ethPrice:      priceUSD,
+          triggerPrice,
+          ethBalance:    ethAmount,
+          usdValue,
+          mode:          priceTarget.mode,
+          targetUSD:     priceTarget.targetUSD,
+          targetPct:     priceTarget.targetPct,
+          baselineUSD:   priceTarget.baselineUSD,
+          reason: `ETH reached $${priceUSD.toFixed(2)} — price target of $${triggerPrice.toFixed(2)} hit. Vault holds ${ethAmount.toFixed(4)} ETH ($${usdValue.toFixed(2)}).`,
         });
       }
     }
