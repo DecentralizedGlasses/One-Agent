@@ -104,9 +104,11 @@ async function getEthPrice() {
 
 // ── Aave position ─────────────────────────────────────────────────────────────
 async function getPosition() {
+  // Read the OWNER's Aave position — this is what PolicyVault's HF rule checks (line 219 of contract)
+  // The vault's own aUSDC supply is tracked separately via getVaultBalances()
   const [col, debt, borrows, , , hf] = await publicClient.readContract({
     address: AAVE_POOL, abi: AAVE_ABI,
-    functionName: "getUserAccountData", args: [VAULT_ADDRESS],
+    functionName: "getUserAccountData", args: [FALLBACK_OWNER],
   });
   const MAX = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
   return {

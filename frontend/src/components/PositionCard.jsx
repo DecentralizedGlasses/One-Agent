@@ -2,7 +2,6 @@ import { useEffect } from "react";
 import { useAccount, useReadContract } from "wagmi";
 import { baseSepolia } from "wagmi/chains";
 import { parseAbi } from "viem";
-import { VAULT_ADDRESS } from "../wagmi";
 
 const AAVE_POOL = "0x8bAB6d1b75f19e9eD9fCe8b9BD338844fF79aE27";
 const AAVE_ABI = parseAbi([
@@ -12,15 +11,16 @@ const AAVE_ABI = parseAbi([
 const MAX_UINT256 = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
 
 export default function PositionCard({ onPosition }) {
-  const { isConnected } = useAccount();
+  const { address, isConnected } = useAccount();
 
+  // Read the connected wallet's Aave position — same address PolicyVault's HF rule monitors
   const { data, isLoading } = useReadContract({
     address: AAVE_POOL,
     abi: AAVE_ABI,
     functionName: "getUserAccountData",
-    args: [VAULT_ADDRESS],
+    args: [address],
     chainId: baseSepolia.id,
-    query: { enabled: isConnected && !!VAULT_ADDRESS, refetchInterval: 15000 },
+    query: { enabled: isConnected && !!address, refetchInterval: 15000 },
   });
 
   const position = data
@@ -36,12 +36,21 @@ export default function PositionCard({ onPosition }) {
     if (position) onPosition?.(position);
   }, [data]);
 
-  const collateral = position?.totalCollateralUSD ?? null;
-  const debt       = position?.totalDebtUSD ?? null;
-  const hf         = position?.healthFactor ?? null;
-  const hfPct      = hf !== null ? Math.min((hf / 3) * 100, 100) : 0;
-  const hfColor    = hf === null ? "text-gray-400 dark:text-slate-500" : hf >= 2 ? "text-green-700 dark:text-green-400" : hf >= 1.5 ? "text-yellow-600 dark:text-yellow-400" : "text-red-600 dark:text-red-400";
-  const barColor   = hf === null ? "bg-gray-300 dark:bg-slate-600" : hf >= 2 ? "bg-green-600" : hf >= 1.5 ? "bg-yellow-500" : "bg-red-500";
+  const collateral  = position?.totalCollateralUSD ?? null;
+  const debt        = position?.totalDebtUSD ?? null;
+  const hf          = position?.healthFactor ?? null;
+  // Aave returns null (MAX_UINT256) when there is no debt — position is infinitely safe
+  const noDebt      = collateral !== null && collateral > 0 && (debt === null || debt === 0);
+  const hfDisplay   = hf !== null ? hf.toFixed(2) : noDebt ? "∞" : "—";
+  const hfPct       = hf !== null ? Math.min((hf / 3) * 100, 100) : noDebt ? 100 : 0;
+  const hfColor     = hf === null
+    ? noDebt ? "text-green-700 dark:text-green-400" : "text-gray-400 dark:text-slate-500"
+    : hf >= 2 ? "text-green-700 dark:text-green-400"
+    : hf >= 1.5 ? "text-yellow-600 dark:text-yellow-400"
+    : "text-red-600 dark:text-red-400";
+  const barColor    = hf === null
+    ? noDebt ? "bg-green-600" : "bg-gray-300 dark:bg-slate-600"
+    : hf >= 2 ? "bg-green-600" : hf >= 1.5 ? "bg-yellow-500" : "bg-red-500";
 
   const hasPosition = position && (position.totalCollateralUSD > 0 || position.totalDebtUSD > 0);
 
@@ -49,7 +58,7 @@ export default function PositionCard({ onPosition }) {
     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 p-5">
       <div className="flex items-center gap-2 mb-4">
         <span className="text-lg">🏛</span>
-        <h2 className="text-base font-semibold text-gray-900 dark:text-slate-100">Vault's Aave position</h2>
+        <h2 className="text-base font-semibold text-gray-900 dark:text-slate-100">Your Aave position</h2>
         {isLoading && (
           <span className="ml-auto text-xs bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400 px-2 py-0.5 rounded-full">loading…</span>
         )}
@@ -100,14 +109,14 @@ export default function PositionCard({ onPosition }) {
               <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${hfPct}%` }} />
             </div>
             <span className={`text-sm font-semibold w-10 text-right ${hfColor}`}>
-              {hf !== null ? hf.toFixed(2) : "—"}
+              {hfDisplay}
             </span>
           </div>
         </div>
       </div>
 
       <p className="mt-3 text-xs text-gray-400 dark:text-slate-500">
-        Vault's position on Base Sepolia · Aave V3 · updates every 15s
+        Your wallet · Base Sepolia · Aave V3 · updates every 15s
       </p>
     </div>
   );

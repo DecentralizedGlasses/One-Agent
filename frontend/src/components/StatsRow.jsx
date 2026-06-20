@@ -8,8 +8,13 @@ export default function StatsRow({ position, log }) {
   const blockedToday = todayLog.filter(e => e.status === "blocked").length;
 
   const hf      = position?.healthFactor ?? null;
-  const hfStr   = hf !== null ? hf.toFixed(2) : "—";
-  const hfColor = hf === null ? "text-gray-400 dark:text-slate-500" : hf >= 2 ? "text-green-700 dark:text-green-400" : hf >= 1.5 ? "text-yellow-600 dark:text-yellow-400" : "text-red-600 dark:text-red-400";
+  const noDebt  = position && position.totalCollateralUSD > 0 && !position.totalDebtUSD;
+  const hfStr   = hf !== null ? hf.toFixed(2) : noDebt ? "∞" : "—";
+  const hfColor = hf === null
+    ? noDebt ? "text-green-700 dark:text-green-400" : "text-gray-400 dark:text-slate-500"
+    : hf >= 2 ? "text-green-700 dark:text-green-400"
+    : hf >= 1.5 ? "text-yellow-600 dark:text-yellow-400"
+    : "text-red-600 dark:text-red-400";
 
   const [vaultUsdc, setVaultUsdc] = useState(null);
 
