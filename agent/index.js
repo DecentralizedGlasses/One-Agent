@@ -248,10 +248,10 @@ async function submitAction(decision, aggressive = false) {
   // will revert if any ETH value is forwarded (even a tiny amount in wei).
   const vaultAmount = aggressive ? amountRaw : 0n;
 
-  // Supply: vault holds USDC and gets aUSDC back (onBehalfOf = vault so vault can later withdraw)
-  // Withdraw: vault burns vault's aUSDC and sends underlying USDC to the owner wallet
+  // Supply: vault's USDC → Aave onBehalfOf OWNER so owner's collateral grows and HF improves
+  // Withdraw: owner's aUSDC → burns and sends USDC back to owner wallet
   const callData = decision.action === "supply"
-    ? encodeFunctionData({ abi: AAVE_ABI, functionName: "supply",   args: [USDC, amountRaw, VAULT_ADDRESS, 0] })
+    ? encodeFunctionData({ abi: AAVE_ABI, functionName: "supply",   args: [USDC, amountRaw, FALLBACK_OWNER, 0] })
     : encodeFunctionData({ abi: AAVE_ABI, functionName: "withdraw", args: [USDC, amountRaw, FALLBACK_OWNER] });
 
   return walletClient.writeContract({
@@ -517,3 +517,13 @@ async function monitor() {
 }
 
 setInterval(monitor, 60_000);
+
+// ── Auto-run cycle ────────────────────────────────────────────────────────────
+// Automatically runs the agent every 5 minutes so vault USDC is actively
+// deployed without needing manual triggers. The PolicyVault cooldown is the
+// real rate-limiter — this just ensures the agent always tries on schedule.
+const AUTO_RUN_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+setInterval(() => {
+  console.log("[auto-run] triggering agent cycle");
+  runCycle().catch(e => console.error("[auto-run] error:", e.message));
+}, AUTO_RUN_INTERVAL_MS);
