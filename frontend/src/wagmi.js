@@ -15,6 +15,7 @@ export const VAULT_ABI = parseAbi([
   "function setAllowedProtocols(address[]) external",
   "function getAllowedProtocols() external view returns (address[])",
   "function getTokenBalance(address) external view returns (uint256)",
+  "function execute(address target, uint256 amount, bytes calldata callData) external returns (bytes memory)",
   "event ExecutionAllowed(address indexed agent, address indexed target, uint256 amount)",
   "event ExecutionBlocked(address indexed agent, address indexed target, string reason)",
   "event AgentRevoked(address indexed owner, address indexed agent)",

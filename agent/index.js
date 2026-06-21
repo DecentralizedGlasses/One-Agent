@@ -63,6 +63,17 @@ const CHAINLINK_ABI = parseAbi([
   "function latestRoundData() external view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)",
 ]);
 
+// Aave V3 addresses-provider + oracle ABIs (for USDC/USD price)
+const POOL_ABI_MINIMAL = parseAbi([
+  "function ADDRESSES_PROVIDER() external view returns (address)",
+]);
+const ADDRESSES_PROVIDER_ABI = parseAbi([
+  "function getPriceOracle() external view returns (address)",
+]);
+const PRICE_ORACLE_ABI = parseAbi([
+  "function getAssetPrice(address asset) external view returns (uint256)",
+]);
+
 // ── In-memory log ─────────────────────────────────────────────────────────────
 const actionLog = [];
 function logAction(entry) {
@@ -100,6 +111,39 @@ async function getEthPrice() {
     functionName: "latestRoundData",
   });
   return { priceUSD: Number(answer) / 1e8, updatedAt: Number(updatedAt) };
+}
+
+// ── Multi-asset prices from Chainlink (ETH) + Aave oracle (USDC) ─────────────
+let _aaveOracleAddress = null;
+
+async function getAaveOracleAddress() {
+  if (_aaveOracleAddress) return _aaveOracleAddress;
+  const providerAddr = await publicClient.readContract({
+    address: AAVE_POOL, abi: POOL_ABI_MINIMAL,
+    functionName: "ADDRESSES_PROVIDER",
+  });
+  _aaveOracleAddress = await publicClient.readContract({
+    address: providerAddr, abi: ADDRESSES_PROVIDER_ABI,
+    functionName: "getPriceOracle",
+  });
+  return _aaveOracleAddress;
+}
+
+async function getPrices() {
+  const [ethData, oracleAddr] = await Promise.all([
+    getEthPrice(),
+    getAaveOracleAddress(),
+  ]);
+  const usdcRaw = await publicClient.readContract({
+    address: oracleAddr, abi: PRICE_ORACLE_ABI,
+    functionName: "getAssetPrice", args: [USDC],
+  });
+  return {
+    ethUsd:    ethData.priceUSD,
+    usdcUsd:   Number(usdcRaw) / 1e8,
+    updatedAt: ethData.updatedAt,
+    sources:   { eth: "chainlink", usdc: "aave-oracle" },
+  };
 }
 
 // ── Aave position ─────────────────────────────────────────────────────────────
@@ -175,7 +219,7 @@ async function ensureSetup() {
 }
 
 // ── Claude: decide what the agent should do ───────────────────────────────────
-async function askClaude(position, aggressive = false, maxTxAmount = null) {
+async function askClaude(position, aggressive = false, maxTxAmount = null, vaultUsdc = 0, vaultAusdc = 0) {
   // Demo mode: always exceed the live on-chain spend cap to reliably trigger the firewall.
   if (aggressive) {
     const capUsdc = maxTxAmount ? Number(maxTxAmount) / 1e6 : 1000;
@@ -183,43 +227,42 @@ async function askClaude(position, aggressive = false, maxTxAmount = null) {
     return { action: "withdraw", amount: demoAmount, reason: `Aggressive rebalance — attempting to withdraw $${demoAmount} USDC to demonstrate the spend cap firewall.` };
   }
 
+  // Fallback when no Anthropic key: only act on genuinely dangerous HF
   if (!anthropic) {
-    if (position.healthFactor !== null && position.healthFactor < 1.5) return { action: "supply", amount: 300, reason: "EMERGENCY: health factor critically low — supplying collateral to avoid liquidation." };
-    if (position.healthFactor !== null && position.healthFactor < 1.8) return { action: "supply", amount: 150, reason: "Health factor below safe threshold — adding collateral." };
-    return { action: "withdraw", amount: 150, reason: "Health factor strong — withdrawing 150 USDC to rebalance liquidity." };
+    const hf = position.healthFactor;
+    if (hf !== null && hf < 1.3 && vaultUsdc >= 50)
+      return { action: "supply", amount: Math.min(200, Math.floor(vaultUsdc)), reason: "EMERGENCY: health factor critically low — supplying collateral to avoid liquidation." };
+    if (hf !== null && hf < 1.5 && vaultUsdc >= 50)
+      return { action: "supply", amount: Math.min(100, Math.floor(vaultUsdc)), reason: "Health factor below safe threshold — adding collateral." };
+    return { action: "none", reason: "Position stable — no action needed." };
   }
 
+  const hf        = position.healthFactor;
+  const hfDisplay = hf !== null ? hf.toFixed(4) : "N/A (no debt, infinitely safe)";
+  const maxSupply = Math.min(300, Math.floor(vaultUsdc));
 
-
-  const hfDisplay = position.healthFactor !== null ? position.healthFactor.toFixed(4) : "N/A";
-
-  const prompt = position.healthFactor !== null && position.healthFactor < 1.5
-    ? `You are an autonomous AI DeFi agent. This is an EMERGENCY.
+  const prompt = `You are an autonomous AI DeFi agent managing an Aave v3 position on Base Sepolia.
 
 Current Aave position:
-- Collateral: $${position.totalCollateralUSD.toFixed(2)}
-- Debt: $${position.totalDebtUSD.toFixed(2)}
-- Health Factor: ${hfDisplay} ← CRITICALLY LOW (liquidation at 1.0)
-
-The health factor is dangerously close to liquidation. You must immediately supply collateral to rescue the position before it gets liquidated.
-
-Reply with JSON only: { "action": "supply", "amount": <number between 100-400>, "reason": "<urgent one-sentence explanation>" }`
-
-    : `You are an autonomous AI DeFi agent managing an Aave v3 position on Base Sepolia.
-
-Current position:
 - Collateral: $${position.totalCollateralUSD.toFixed(2)}
 - Debt: $${position.totalDebtUSD.toFixed(2)}
 - Health Factor: ${hfDisplay}
 - Available to borrow: $${position.availableBorrowsUSD.toFixed(2)}
 
-Your job is to actively manage this portfolio. You must always take an action — either supply more collateral or withdraw some USDC to rebalance.
+Vault liquid reserves:
+- Vault USDC (spendable): $${vaultUsdc.toFixed(2)}
+- Vault aUSDC (withdrawable from Aave): $${vaultAusdc.toFixed(2)}
 
-Rules (enforced on-chain by PolicyVault — not your concern):
-- If health factor < 1.8: supply 100–300 USDC as collateral to stay safe.
-- If health factor >= 1.8: withdraw 100–200 USDC to optimize liquidity elsewhere.
+Decision rules — follow exactly:
+1. HF < 1.3 AND vault USDC >= $50 → EMERGENCY supply up to $${maxSupply} USDC.
+2. HF 1.3–1.5 AND vault USDC >= $100 → supply 100–150 USDC to reduce liquidation risk.
+3. HF 1.5–2.0 → hold, action "none". Position is safe, preserve vault reserves.
+4. HF > 2.0 AND vault aUSDC > $100 → withdraw 100–150 USDC to reclaim liquidity.
+5. HF = N/A (no debt) → hold, action "none".
+6. Vault USDC < $50 → never supply regardless of HF; action "none" or "withdraw" only.
+7. Do NOT drain the vault. Preserve reserves for future emergencies.
 
-Reply with JSON only: { "action": "supply"|"withdraw", "amount": <number>, "reason": "<one sentence explaining the decision>" }`;
+Reply with JSON only: { "action": "supply"|"withdraw"|"none", "amount": <number or 0>, "reason": "<one sentence>" }`;
 
   const resp = await anthropic.messages.create({
     model: "claude-sonnet-4-6", max_tokens: 300,
@@ -307,7 +350,7 @@ async function runCycle(aggressive = false) {
     const vaultUsdcUsdc  = Number(vaultBal.usdcRaw)  / 1e6; // vault USDC available to supply
     const vaultAusdcUsdc = Number(vaultBal.ausdcRaw) / 1e6; // vault aUSDC available to withdraw
 
-    decision = await askClaude(position, aggressive, maxTxAmount);
+    decision = await askClaude(position, aggressive, maxTxAmount, vaultUsdcUsdc, vaultAusdcUsdc);
 
     // Snapshot captured before any mutation — stored in every log entry
     const snapshot = {
@@ -408,6 +451,14 @@ app.get("/eth-price", async (req, res) => {
   try {
     const data = await getEthPrice();
     res.json(data);
+  } catch (e) {
+    res.json({ error: e.message });
+  }
+});
+
+app.get("/prices", async (req, res) => {
+  try {
+    res.json(await getPrices());
   } catch (e) {
     res.json({ error: e.message });
   }

@@ -9,6 +9,7 @@ import PolicyPanel     from "./components/PolicyPanel";
 import ActionFeed      from "./components/ActionFeed";
 import EthPriceTarget  from "./components/EthPriceTarget";
 import FundVault       from "./components/FundVault";
+import LivePrices      from "./components/LivePrices";
 import useDarkMode     from "./hooks/useDarkMode";
 
 export default function App() {
@@ -69,17 +70,28 @@ export default function App() {
         toggleDark={toggleDark}
       />
 
-      <main className="max-w-5xl mx-auto px-4 py-6 space-y-4">
+      <main className="max-w-screen-xl mx-auto px-4 py-6 space-y-4">
         <StatsRow position={position} log={log} />
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-          <div className="space-y-4">
-            <PositionCard onPosition={setPosition} />
-            <PolicyPanel />
-            <FundVault />
-            <EthPriceTarget />
+        {/* 3-col layout: live prices (1/3) | panels + feed (2/3) */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+
+          {/* Left 1/3 — live price ticker */}
+          <div className="lg:col-span-1">
+            <LivePrices />
           </div>
-          <ActionFeed agentRevoked={agentRevoked} onLog={setLog} />
+
+          {/* Right 2/3 — agent panels + action feed */}
+          <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+            <div className="space-y-4">
+              <PositionCard onPosition={setPosition} />
+              <PolicyPanel />
+              <FundVault />
+              <EthPriceTarget />
+            </div>
+            <ActionFeed agentRevoked={agentRevoked} onLog={setLog} />
+          </div>
+
         </div>
       </main>
     </div>
