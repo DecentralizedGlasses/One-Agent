@@ -49,7 +49,7 @@ export default function StatsRow({ position, log }) {
         <StatCard label="Health factor" value={hfStr} valueClass={hfColor} />
 
         {/* Vault USDC card — has Fund + Withdraw buttons */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 px-5 py-4">
+        <div className="glass-card rounded-2xl border border-gray-200 dark:border-slate-700 px-5 py-4">
           <p className="text-sm text-gray-500 dark:text-slate-400 mb-1">Vault USDC</p>
           <p className={`text-3xl font-bold ${vaultUsdcColor} mb-2`}>{vaultUsdcStr}</p>
           {vaultUsdc === 0 && (
@@ -98,7 +98,7 @@ export default function StatsRow({ position, log }) {
 
 function StatCard({ label, value, valueClass = "text-gray-900 dark:text-slate-100", sub }) {
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 px-5 py-4">
+    <div className="glass-card rounded-2xl border border-gray-200 dark:border-slate-700 px-5 py-4">
       <p className="text-sm text-gray-500 dark:text-slate-400 mb-1">{label}</p>
       <p className={`text-3xl font-bold ${valueClass}`}>{value}</p>
       {sub && <p className="text-xs text-orange-500 mt-1">{sub}</p>}

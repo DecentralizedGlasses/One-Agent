@@ -254,7 +254,7 @@ export default function VaultModal({ mode, vaultUsdc, onClose, onSuccess }) {
         onClick={onClose}
       />
       {/* Card */}
-      <div className="relative z-10 w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-2xl p-6">
+      <div className="relative z-10 w-full max-w-md glass-card rounded-2xl border border-gray-200 dark:border-slate-700 shadow-2xl p-6">
         <ModalContent
           mode={mode}
           vaultUsdc={vaultUsdc}

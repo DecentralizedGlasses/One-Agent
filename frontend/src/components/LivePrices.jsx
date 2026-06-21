@@ -67,7 +67,7 @@ export default function LivePrices() {
   const rows = data ? buildRows(data) : null;
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 p-5 sticky top-4">
+    <div className="glass-card rounded-2xl border border-gray-200 dark:border-slate-700 p-5 sticky top-4">
       {/* Header */}
       <div className="flex items-center gap-2 mb-4">
         <span className="relative flex h-2 w-2">

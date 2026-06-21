@@ -117,7 +117,7 @@ export default function PolicyPanel() {
   ];
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 p-5">
+    <div className="glass-card rounded-2xl border border-gray-200 dark:border-slate-700 p-5">
       {/* Header */}
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-2">

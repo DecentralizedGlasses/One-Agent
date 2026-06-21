@@ -55,7 +55,7 @@ export default function ActionFeed({ agentRevoked = false, onLog }) {
   }, []);
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 p-5 flex flex-col h-full">
+    <div className="glass-card rounded-2xl border border-gray-200 dark:border-slate-700 p-5 flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">

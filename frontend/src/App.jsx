@@ -12,6 +12,35 @@ import FundVault       from "./components/FundVault";
 import LivePrices      from "./components/LivePrices";
 import useDarkMode     from "./hooks/useDarkMode";
 
+/* ── Shared background layer (fixed, behind everything) ─────────────────── */
+function Background() {
+  return (
+    <div className="fixed inset-0 -z-10 overflow-hidden bg-grid">
+      {/* Base gradient */}
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-white to-indigo-50/60 dark:from-slate-950 dark:via-slate-950 dark:to-slate-950" />
+
+      {/* Blob 1 — top-left, blue */}
+      <div className="animate-blob absolute -top-56 -left-56 h-[680px] w-[680px] rounded-full
+                      bg-blue-300/30 dark:bg-blue-700/20 blur-[130px]" />
+
+      {/* Blob 2 — top-right, violet */}
+      <div className="animate-blob animation-delay-3
+                      absolute -top-32 right-0 h-[520px] w-[520px] rounded-full
+                      bg-violet-300/25 dark:bg-violet-700/15 blur-[110px]" />
+
+      {/* Blob 3 — bottom-center, indigo */}
+      <div className="animate-blob animation-delay-6
+                      absolute bottom-0 left-1/2 h-[480px] w-[700px] -translate-x-1/2 rounded-full
+                      bg-indigo-300/20 dark:bg-indigo-700/12 blur-[130px]" />
+
+      {/* Blob 4 — bottom-right, cyan */}
+      <div className="animate-blob animation-delay-9
+                      absolute -bottom-40 right-0 h-[400px] w-[400px] rounded-full
+                      bg-cyan-300/20 dark:bg-cyan-600/12 blur-[100px]" />
+    </div>
+  );
+}
+
 export default function App() {
   const [optimisticRevoked, setOptimisticRevoked] = useState(null);
   const [position, setPosition] = useState(null);
@@ -32,10 +61,11 @@ export default function App() {
 
   if (!isConnected) {
     return (
-      <div className="min-h-screen bg-cream dark:bg-slate-950 flex items-center justify-center px-4">
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <Background />
         <div className="text-center space-y-5">
           <div className="flex items-center justify-center gap-2">
-            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center">
+            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
               <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
               </svg>
@@ -45,7 +75,7 @@ export default function App() {
           <p className="text-gray-500 dark:text-slate-400 text-sm">On-chain policy firewall for AI DeFi agents</p>
           <button
             onClick={() => connect({ connector: injected() })}
-            className="px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-500 transition"
+            className="px-6 py-3 bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 text-white rounded-xl font-semibold shadow-lg shadow-blue-500/25 transition"
           >
             Connect Wallet
           </button>
@@ -61,7 +91,8 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-cream dark:bg-slate-950">
+    <div className="min-h-screen">
+      <Background />
       <Header
         agentRevoked={agentRevoked}
         setOptimisticRevoked={setOptimisticRevoked}

@@ -55,7 +55,7 @@ export default function PositionCard({ onPosition }) {
   const hasPosition = position && (position.totalCollateralUSD > 0 || position.totalDebtUSD > 0);
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 p-5">
+    <div className="glass-card rounded-2xl border border-gray-200 dark:border-slate-700 p-5">
       <div className="flex items-center gap-2 mb-4">
         <span className="text-lg">🏛</span>
         <h2 className="text-base font-semibold text-gray-900 dark:text-slate-100">Your Aave position</h2>
